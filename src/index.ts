@@ -33,6 +33,33 @@ export default {
 		const text = body?.message?.text;
 		const telegramUserId = body?.message?.from?.id ?? 123456789;
 		const sql = neon(env.DATABASE_URL);
+		
+		if (text === "/report") {
+			const rows = await sql`
+				SELECT created_at, amount, category, note
+				FROM expenses
+				WHERE telegram_user_id = ${telegramUserId}
+				ORDER BY created_at DESC
+			`;
+
+			const header = "date,amount,category,note";
+
+			const csvRows = rows.map((row) => {
+				return [
+					row.created_at,
+					row.amount,
+					row.category,
+					row.note ?? "",
+				].join(",");
+			});
+
+			const csv = [header, ...csvRows].join("\n");
+
+			return Response.json({
+				ok: true,
+				csv,
+			});
+		}
 
 		if (text === "/list") {
 			const rows = await sql`
