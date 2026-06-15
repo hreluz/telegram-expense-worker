@@ -23,4 +23,12 @@ describe("sendTelegramMessage", () => {
 		expect(options.method).toBe("POST");
 		expect(JSON.parse(options.body)).toEqual({ chat_id: 42, text: "Hello!" });
 	});
+
+	it("throws when the Telegram API returns an error", async () => {
+		mockFetch.mockResolvedValue(
+			new Response('{"ok":false,"error_code":400,"description":"Bad Request: chat not found"}', { status: 400 })
+		);
+
+		await expect(sendTelegramMessage("mytoken", 42, "Hello!")).rejects.toThrow("Telegram API error 400:");
+	});
 });

@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import type { Env, TelegramBody } from "./types";
-import { handleReport, handleList, handleAddExpense, handleMigrate } from "./handlers";
+import { handleReport, handleList, handleAddExpense, handleMigrate, handleLogs } from "./handlers";
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
@@ -17,7 +17,9 @@ export default {
 			return Response.json({ error: "No text found" }, { status: 400 });
 		}
 
+		if (text === "/start") return Response.json({ ok: true });
 		if (text === "/migrate") return handleMigrate(sql, telegramUserId, env.TELEGRAM_TOKEN, env.ADMIN_IDS);
+		if (text === "/logs") return handleLogs(sql, telegramUserId, env.TELEGRAM_TOKEN, env.ADMIN_IDS);
 		if (text === "/report") return handleReport(sql, telegramUserId, env.TELEGRAM_TOKEN);
 		if (text === "/list") return handleList(sql, telegramUserId, env.TELEGRAM_TOKEN);
 

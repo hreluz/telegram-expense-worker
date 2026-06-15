@@ -11,6 +11,31 @@ export async function migrate(sql: Sql) {
 			created_at TIMESTAMPTZ DEFAULT NOW()
 		)
 	`;
+	await sql`
+		CREATE TABLE IF NOT EXISTS logs (
+			id SERIAL PRIMARY KEY,
+			telegram_user_id BIGINT,
+			message TEXT NOT NULL,
+			created_at TIMESTAMPTZ DEFAULT NOW()
+		)
+	`;
+}
+
+export async function saveLog(sql: Sql, telegramUserId: number, message: string) {
+	await sql`
+		INSERT INTO logs (telegram_user_id, message)
+		VALUES (${telegramUserId}, ${message})
+	`;
+}
+
+export async function fetchLogs(sql: Sql, telegramUserId: number) {
+	return sql`
+		SELECT message, created_at
+		FROM logs
+		WHERE telegram_user_id = ${telegramUserId}
+		ORDER BY created_at DESC
+		LIMIT 10
+	`;
 }
 
 export async function fetchReport(sql: Sql, telegramUserId: number) {

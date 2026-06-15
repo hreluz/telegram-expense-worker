@@ -77,9 +77,9 @@ npm test         # run tests
 ### 1. Set production secrets
 
 ```bash
-wrangler secret put DATABASE_URL
-wrangler secret put TELEGRAM_TOKEN
-wrangler secret put ADMIN_IDS
+npx wrangler secret put DATABASE_URL
+npx wrangler secret put TELEGRAM_TOKEN
+npx wrangler secret put ADMIN_IDS
 ```
 
 ### 2. Deploy the worker

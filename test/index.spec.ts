@@ -16,6 +16,7 @@ vi.mock("../src/telegram", () => ({
 }));
 
 const testEnv = { DATABASE_URL: "postgresql://test", TELEGRAM_TOKEN: "test-token" };
+const adminEnv = { ...testEnv, ADMIN_IDS: "42" };
 
 function postRequest(body: object) {
 	return new Request("http://example.com", {
@@ -51,6 +52,84 @@ describe("telegram-expense-worker", () => {
 		await waitOnExecutionContext(ctx);
 		expect(response.status).toBe(400);
 		expect(await response.json()).toMatchObject({ error: "No text found" });
+	});
+
+	describe("/start", () => {
+		it("returns ok without sending a Telegram message", async () => {
+			const request = postRequest(telegramMessage("/start"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(200);
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+			expect(mockSendTelegramMessage).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("/migrate", () => {
+		it("returns 500 when ADMIN_IDS is not configured", async () => {
+			const request = postRequest(telegramMessage("/migrate"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(500);
+			const body = await response.json() as { error: string };
+			expect(body.error).toBe("ADMIN_IDS is not configured");
+		});
+
+		it("returns 403 when user is not in ADMIN_IDS", async () => {
+			const request = postRequest(telegramMessage("/migrate", 999));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, adminEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(403);
+		});
+
+		it("returns ok when user is in ADMIN_IDS", async () => {
+			const request = postRequest(telegramMessage("/migrate", 42));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, adminEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+		});
+	});
+
+	describe("/logs", () => {
+		it("returns 500 when ADMIN_IDS is not configured", async () => {
+			const request = postRequest(telegramMessage("/logs"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(500);
+			const body = await response.json() as { error: string };
+			expect(body.error).toBe("ADMIN_IDS is not configured");
+		});
+
+		it("returns 403 when user is not in ADMIN_IDS", async () => {
+			const request = postRequest(telegramMessage("/logs", 999));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, adminEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(403);
+		});
+
+		it("returns ok when user is in ADMIN_IDS", async () => {
+			const request = postRequest(telegramMessage("/logs", 42));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, adminEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+		});
 	});
 
 	describe("/report", () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchReport, fetchRecent, saveExpense } from "../src/db";
+import { fetchReport, fetchRecent, saveExpense, migrate, saveLog, fetchLogs } from "../src/db";
 import type { Sql } from "../src/types";
 
 describe("db", () => {
@@ -40,6 +40,35 @@ describe("db", () => {
 
 			expect(mockSql).toHaveBeenCalledOnce();
 			expect(result).toBeUndefined();
+		});
+	});
+
+	describe("migrate", () => {
+		it("creates both the expenses and logs tables", async () => {
+			await migrate(mockSql);
+
+			expect(mockSql).toHaveBeenCalledTimes(2);
+		});
+	});
+
+	describe("saveLog", () => {
+		it("calls sql and returns nothing", async () => {
+			const result = await saveLog(mockSql, 42, "Something went wrong");
+
+			expect(mockSql).toHaveBeenCalledOnce();
+			expect(result).toBeUndefined();
+		});
+	});
+
+	describe("fetchLogs", () => {
+		it("returns rows from sql", async () => {
+			const rows = [{ message: "DB connection failed", created_at: "2026-01-01T10:00:00Z" }];
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue(rows);
+
+			const result = await fetchLogs(mockSql, 42);
+
+			expect(result).toEqual(rows);
+			expect(mockSql).toHaveBeenCalledOnce();
 		});
 	});
 });
