@@ -1,5 +1,5 @@
 import type { Sql, Expense } from "./types";
-import { fetchReport, fetchRecent, saveExpense } from "./db";
+import { fetchReport, fetchRecent, saveExpense, migrate } from "./db";
 import { sendTelegramMessage } from "./telegram";
 
 export function parseExpense(text: string): Expense {
@@ -44,6 +44,21 @@ export async function handleList(sql: Sql, telegramUserId: number, token: string
 	await sendTelegramMessage(token, telegramUserId, text);
 
 	return Response.json({ ok: true, rows });
+}
+
+export async function handleMigrate(sql: Sql, telegramUserId: number, token: string, adminIds: string | undefined): Promise<Response> {
+	if (!adminIds) {
+		await sendTelegramMessage(token, telegramUserId, "ADMIN_IDS is not configured.");
+		return Response.json({ ok: false, error: "ADMIN_IDS is not configured" }, { status: 500 });
+	}
+	const allowed = adminIds.split(",").map((id) => id.trim());
+	if (!allowed.includes(String(telegramUserId))) {
+		await sendTelegramMessage(token, telegramUserId, "Unauthorized.");
+		return Response.json({ ok: false, error: "Unauthorized" }, { status: 403 });
+	}
+	await migrate(sql);
+	await sendTelegramMessage(token, telegramUserId, "Migration complete.");
+	return Response.json({ ok: true });
 }
 
 export async function handleAddExpense(sql: Sql, telegramUserId: number, text: string, token: string): Promise<Response> {
