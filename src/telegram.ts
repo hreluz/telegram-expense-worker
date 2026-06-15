@@ -9,3 +9,15 @@ export async function sendTelegramMessage(token: string, chatId: number, text: s
 		throw new Error(`Telegram API error ${res.status}: ${error}`);
 	}
 }
+
+export async function dropPendingUpdates(token: string, webhookUrl: string) {
+	const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ url: webhookUrl, drop_pending_updates: true }),
+	});
+	if (!res.ok) {
+		const error = await res.text();
+		throw new Error(`Telegram API error ${res.status}: ${error}`);
+	}
+}

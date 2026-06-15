@@ -19,9 +19,15 @@ Examples:
 12 coffee
 ```
 
+Categories are created automatically and stored in lowercase, so `GYM`, `Gym`, and `gym` all map to the same category.
+
 **List recent expenses** — send `/list` to get your last 10 entries.
 
-**Initialize the database** — send `/migrate` to create the expenses table (admin only).
+**Export all expenses** — send `/report` to receive a CSV of your full history.
+
+**Initialize the database** — send `/migrate` to create the tables (admin only).
+
+**Drop pending Telegram updates** — send `/droppending` to flush Telegram's webhook retry queue (admin only).
 
 ## Stack
 
@@ -38,17 +44,29 @@ Examples:
 npm install
 ```
 
-### 2. Create the database table
+### 2. Create the database tables
 
 Send `/migrate` from Telegram (you must be listed in `ADMIN_IDS`). Alternatively, run the DDL manually in your Neon console:
 
 ```sql
+CREATE TABLE IF NOT EXISTS categories (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE
+);
+
 CREATE TABLE IF NOT EXISTS expenses (
   id SERIAL PRIMARY KEY,
   telegram_user_id BIGINT NOT NULL,
   amount NUMERIC(10, 2) NOT NULL,
-  category TEXT NOT NULL,
+  category_id INTEGER NOT NULL REFERENCES categories(id),
   note TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS logs (
+  id SERIAL PRIMARY KEY,
+  telegram_user_id BIGINT,
+  message TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
@@ -63,7 +81,7 @@ TELEGRAM_TOKEN=your_telegram_bot_token
 ADMIN_IDS=your_telegram_user_id
 ```
 
-`ADMIN_IDS` is a comma-separated list of Telegram user IDs permitted to run `/migrate`.
+`ADMIN_IDS` is a comma-separated list of Telegram user IDs permitted to run `/migrate` and `/droppending`.
 
 ## Development
 

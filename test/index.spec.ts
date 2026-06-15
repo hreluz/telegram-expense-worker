@@ -2,9 +2,10 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import worker from "../src/index";
 
-const { mockSql, mockSendTelegramMessage } = vi.hoisted(() => ({
+const { mockSql, mockSendTelegramMessage, mockDropPendingUpdates } = vi.hoisted(() => ({
 	mockSql: vi.fn().mockResolvedValue([]),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
+	mockDropPendingUpdates: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@neondatabase/serverless", () => ({
@@ -13,6 +14,7 @@ vi.mock("@neondatabase/serverless", () => ({
 
 vi.mock("../src/telegram", () => ({
 	sendTelegramMessage: mockSendTelegramMessage,
+	dropPendingUpdates: mockDropPendingUpdates,
 }));
 
 const testEnv = { DATABASE_URL: "postgresql://test", TELEGRAM_TOKEN: "test-token" };
@@ -132,6 +134,36 @@ describe("telegram-expense-worker", () => {
 		});
 	});
 
+	describe("/droppending", () => {
+		it("returns 500 when ADMIN_IDS is not configured", async () => {
+			const request = postRequest(telegramMessage("/droppending"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(500);
+		});
+
+		it("returns 403 when user is not in ADMIN_IDS", async () => {
+			const request = postRequest(telegramMessage("/droppending", 999));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, adminEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(403);
+		});
+
+		it("returns ok when user is in ADMIN_IDS", async () => {
+			const request = postRequest(telegramMessage("/droppending", 42));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, adminEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+		});
+	});
+
 	describe("/report", () => {
 		it("returns CSV with header and rows", async () => {
 			mockSql.mockResolvedValue([
@@ -191,6 +223,10 @@ describe("telegram-expense-worker", () => {
 	});
 
 	describe("add expense", () => {
+		beforeEach(() => {
+			mockSql.mockResolvedValueOnce([{ id: 1 }]);
+		});
+
 		it("saves a valid expense", async () => {
 			const request = postRequest(telegramMessage("300 gym"));
 			const ctx = createExecutionContext();

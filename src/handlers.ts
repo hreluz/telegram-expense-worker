@@ -1,6 +1,6 @@
 import type { Sql, Expense } from "./types";
 import { fetchReport, fetchRecent, saveExpense, migrate, saveLog, fetchLogs } from "./db";
-import { sendTelegramMessage } from "./telegram";
+import { sendTelegramMessage, dropPendingUpdates } from "./telegram";
 
 async function trySend(sql: Sql, token: string, telegramUserId: number, text: string) {
 	try {
@@ -32,7 +32,7 @@ export function parseExpense(text: string): Expense {
 	}
 
 	const amount = Number(parts[0]);
-	const category = parts[1];
+	const category = parts[1].toLowerCase();
 	const note = parts.slice(2).join(" ");
 
 	if (Number.isNaN(amount) || amount <= 0) {
@@ -113,6 +113,21 @@ export async function handleLogs(sql: Sql, telegramUserId: number, token: string
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Unknown error";
 		await trySend(sql, token, telegramUserId, "Something went wrong.");
+		return Response.json({ ok: false, error: message }, { status: 500 });
+	}
+}
+
+export async function handleDropPending(sql: Sql, telegramUserId: number, token: string, webhookUrl: string, adminIds: string | undefined): Promise<Response> {
+	const unauthorized = await requireAdmin(sql, telegramUserId, token, adminIds);
+	if (unauthorized) return unauthorized;
+	try {
+		await dropPendingUpdates(token, webhookUrl);
+		await trySend(sql, token, telegramUserId, "Pending updates dropped.");
+		return Response.json({ ok: true });
+	} catch (error) {
+		const message = error instanceof Error ? error.message : "Unknown error";
+		await saveLog(sql, telegramUserId, message);
+		await trySend(sql, token, telegramUserId, "Failed to drop pending updates.");
 		return Response.json({ ok: false, error: message }, { status: 500 });
 	}
 }

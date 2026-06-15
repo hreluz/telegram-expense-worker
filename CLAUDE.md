@@ -38,7 +38,7 @@ This is a Cloudflare Worker acting as a Telegram bot webhook. Telegram POSTs upd
 ```
 src/types.ts     — shared types: Env, TelegramBody, Expense, Sql
 src/db.ts        — data access: fetchReport, fetchRecent, saveExpense (all SQL lives here)
-src/telegram.ts  — outbound API: sendTelegramMessage
+src/telegram.ts  — outbound API: sendTelegramMessage, dropPendingUpdates
 src/handlers.ts  — command logic: parseExpense + one handler per command
 src/index.ts     — worker entry point: parse body, guard, dispatch to handler
 ```
@@ -54,7 +54,7 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 
 ### Message format
 
-Expense messages follow `<amount> <category> [note]`. Parsed by `parseExpense` in `handlers.ts` — throws with user-facing error messages on invalid input, which are caught and forwarded to the user via Telegram.
+Expense messages follow `<amount> <category> [note]`. Parsed by `parseExpense` in `handlers.ts` — throws with user-facing error messages on invalid input, which are caught and forwarded to the user via Telegram. The category is lowercased before storage so `GYM` and `gym` resolve to the same `categories` row.
 
 ## Environment variables
 
@@ -66,7 +66,7 @@ TELEGRAM_TOKEN=your_telegram_bot_token
 ADMIN_IDS=123456789,987654321
 ```
 
-`ADMIN_IDS` is a comma-separated list of Telegram user IDs allowed to run `/migrate`.
+`ADMIN_IDS` is a comma-separated list of Telegram user IDs allowed to run `/migrate` and `/droppending`.
 
 For production, set via `wrangler secret put DATABASE_URL`, `wrangler secret put TELEGRAM_TOKEN`, and `wrangler secret put ADMIN_IDS`.
 
@@ -92,12 +92,24 @@ vi.mock("../src/db", () => ({ fetchReport: mockFn }));
 ## Database schema
 
 ```sql
+CREATE TABLE categories (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE
+);
+
 CREATE TABLE expenses (
   id SERIAL PRIMARY KEY,
   telegram_user_id BIGINT NOT NULL,
   amount NUMERIC(10, 2) NOT NULL,
-  category TEXT NOT NULL,
+  category_id INTEGER NOT NULL REFERENCES categories(id),
   note TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE logs (
+  id SERIAL PRIMARY KEY,
+  telegram_user_id BIGINT,
+  message TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { sendTelegramMessage } from "../src/telegram";
+import { sendTelegramMessage, dropPendingUpdates } from "../src/telegram";
 
 const mockFetch = vi.fn().mockResolvedValue(new Response());
 
@@ -30,5 +30,26 @@ describe("sendTelegramMessage", () => {
 		);
 
 		await expect(sendTelegramMessage("mytoken", 42, "Hello!")).rejects.toThrow("Telegram API error 400:");
+	});
+});
+
+describe("dropPendingUpdates", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockFetch.mockResolvedValue(new Response());
+	});
+
+	it("calls the setWebhook endpoint with drop_pending_updates", async () => {
+		await dropPendingUpdates("mytoken", "https://my-worker.example.com");
+
+		const [url, options] = mockFetch.mock.calls[0];
+		expect(url).toBe("https://api.telegram.org/botmytoken/setWebhook");
+		expect(JSON.parse(options.body)).toEqual({ url: "https://my-worker.example.com", drop_pending_updates: true });
+	});
+
+	it("throws when the Telegram API returns an error", async () => {
+		mockFetch.mockResolvedValue(new Response("Bad Request", { status: 400 }));
+
+		await expect(dropPendingUpdates("mytoken", "https://my-worker.example.com")).rejects.toThrow("Telegram API error 400:");
 	});
 });
