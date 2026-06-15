@@ -2,15 +2,20 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import worker from "../src/index";
 
-const { mockSql } = vi.hoisted(() => ({
+const { mockSql, mockSendTelegramMessage } = vi.hoisted(() => ({
 	mockSql: vi.fn().mockResolvedValue([]),
+	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@neondatabase/serverless", () => ({
 	neon: () => mockSql,
 }));
 
-const testEnv = { DATABASE_URL: "postgresql://test" };
+vi.mock("../src/telegram", () => ({
+	sendTelegramMessage: mockSendTelegramMessage,
+}));
+
+const testEnv = { DATABASE_URL: "postgresql://test", TELEGRAM_TOKEN: "test-token" };
 
 function postRequest(body: object) {
 	return new Request("http://example.com", {
@@ -26,8 +31,8 @@ function telegramMessage(text: string, userId = 42) {
 
 describe("telegram-expense-worker", () => {
 	beforeEach(() => {
-		vi.clearAllMocks();
 		mockSql.mockResolvedValue([]);
+		mockSendTelegramMessage.mockResolvedValue(undefined);
 	});
 
 	it("returns running message on non-POST request", async () => {

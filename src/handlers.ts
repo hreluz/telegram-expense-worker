@@ -1,5 +1,6 @@
 import type { Sql, Expense } from "./types";
 import { fetchReport, fetchRecent, saveExpense } from "./db";
+import { sendTelegramMessage } from "./telegram";
 
 export function parseExpense(text: string): Expense {
 	const parts = text.trim().split(/\s+/);
@@ -19,7 +20,7 @@ export function parseExpense(text: string): Expense {
 	return { amount, category, note };
 }
 
-export async function handleReport(sql: Sql, telegramUserId: number): Promise<Response> {
+export async function handleReport(sql: Sql, telegramUserId: number, token: string): Promise<Response> {
 	const rows = await fetchReport(sql, telegramUserId);
 
 	const header = "date,amount,category,note";
@@ -28,23 +29,32 @@ export async function handleReport(sql: Sql, telegramUserId: number): Promise<Re
 	);
 	const csv = [header, ...csvRows].join("\n");
 
+	await sendTelegramMessage(token, telegramUserId, csv);
+
 	return Response.json({ ok: true, csv });
 }
 
-export async function handleList(sql: Sql, telegramUserId: number): Promise<Response> {
+export async function handleList(sql: Sql, telegramUserId: number, token: string): Promise<Response> {
 	const rows = await fetchRecent(sql, telegramUserId);
+
+	const text = rows.length
+		? rows.map((r) => `${r.amount} ${r.category}${r.note ? ` (${r.note})` : ""}`).join("\n")
+		: "No expenses yet.";
+
+	await sendTelegramMessage(token, telegramUserId, text);
+
 	return Response.json({ ok: true, rows });
 }
 
-export async function handleAddExpense(sql: Sql, telegramUserId: number, text: string): Promise<Response> {
+export async function handleAddExpense(sql: Sql, telegramUserId: number, text: string, token: string): Promise<Response> {
 	try {
 		const expense = parseExpense(text);
 		await saveExpense(sql, telegramUserId, expense);
+		await sendTelegramMessage(token, telegramUserId, `Saved: ${expense.amount} ${expense.category}`);
 		return Response.json({ ok: true, message: "Saved", expense });
 	} catch (error) {
-		return Response.json(
-			{ ok: false, error: error instanceof Error ? error.message : "Invalid input" },
-			{ status: 400 }
-		);
+		const message = error instanceof Error ? error.message : "Invalid input";
+		await sendTelegramMessage(token, telegramUserId, message);
+		return Response.json({ ok: false, error: message }, { status: 400 });
 	}
 }

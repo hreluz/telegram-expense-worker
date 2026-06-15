@@ -2,6 +2,7 @@ import type { NeonQueryFunction } from "@neondatabase/serverless";
 
 export type Env = {
 	DATABASE_URL: string;
+	TELEGRAM_TOKEN: string;
 };
 
 export type TelegramBody = {

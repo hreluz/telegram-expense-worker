@@ -17,9 +17,9 @@ export default {
 			return Response.json({ error: "No text found" }, { status: 400 });
 		}
 
-		if (text === "/report") return handleReport(sql, telegramUserId);
-		if (text === "/list") return handleList(sql, telegramUserId);
+		if (text === "/report") return handleReport(sql, telegramUserId, env.TELEGRAM_TOKEN);
+		if (text === "/list") return handleList(sql, telegramUserId, env.TELEGRAM_TOKEN);
 
-		return handleAddExpense(sql, telegramUserId, text);
+		return handleAddExpense(sql, telegramUserId, text, env.TELEGRAM_TOKEN);
 	},
 } satisfies ExportedHandler<Env>;
