@@ -35,19 +35,23 @@ describe("db", () => {
 	});
 
 	describe("saveExpense", () => {
-		it("calls sql and returns nothing", async () => {
+		it("calls sql twice (upsert category + insert) and returns nothing", async () => {
+			(mockSql as ReturnType<typeof vi.fn>)
+				.mockResolvedValueOnce([{ id: 1 }])
+				.mockResolvedValueOnce([]);
+
 			const result = await saveExpense(mockSql, 42, { amount: 300, category: "gym", note: "" });
 
-			expect(mockSql).toHaveBeenCalledOnce();
+			expect(mockSql).toHaveBeenCalledTimes(2);
 			expect(result).toBeUndefined();
 		});
 	});
 
 	describe("migrate", () => {
-		it("creates both the expenses and logs tables", async () => {
+		it("creates the categories, expenses, and logs tables", async () => {
 			await migrate(mockSql);
 
-			expect(mockSql).toHaveBeenCalledTimes(2);
+			expect(mockSql).toHaveBeenCalledTimes(3);
 		});
 	});
 

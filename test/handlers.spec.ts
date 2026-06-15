@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseExpense, handleReport, handleList, handleAddExpense, handleMigrate, handleLogs } from "../src/handlers";
+import { parseExpense, handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending } from "../src/handlers";
 import type { Sql } from "../src/types";
 
-const { mockFetchReport, mockFetchRecent, mockSaveExpense, mockMigrate, mockSaveLog, mockFetchLogs, mockSendTelegramMessage } = vi.hoisted(() => ({
+const { mockFetchReport, mockFetchRecent, mockSaveExpense, mockMigrate, mockSaveLog, mockFetchLogs, mockSendTelegramMessage, mockDropPendingUpdates } = vi.hoisted(() => ({
 	mockFetchReport: vi.fn().mockResolvedValue([]),
 	mockFetchRecent: vi.fn().mockResolvedValue([]),
 	mockSaveExpense: vi.fn().mockResolvedValue(undefined),
@@ -10,6 +10,7 @@ const { mockFetchReport, mockFetchRecent, mockSaveExpense, mockMigrate, mockSave
 	mockSaveLog: vi.fn().mockResolvedValue(undefined),
 	mockFetchLogs: vi.fn().mockResolvedValue([]),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
+	mockDropPendingUpdates: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/db", () => ({
@@ -23,6 +24,7 @@ vi.mock("../src/db", () => ({
 
 vi.mock("../src/telegram", () => ({
 	sendTelegramMessage: mockSendTelegramMessage,
+	dropPendingUpdates: mockDropPendingUpdates,
 }));
 
 const sql = {} as unknown as Sql;
@@ -36,6 +38,7 @@ beforeEach(() => {
 	mockSaveLog.mockResolvedValue(undefined);
 	mockFetchLogs.mockResolvedValue([]);
 	mockSendTelegramMessage.mockResolvedValue(undefined);
+	mockDropPendingUpdates.mockResolvedValue(undefined);
 });
 
 describe("parseExpense", () => {
@@ -69,6 +72,10 @@ describe("parseExpense", () => {
 
 	it("throws when amount is negative", () => {
 		expect(() => parseExpense("-10 gym")).toThrow("Amount must be a valid number");
+	});
+
+	it("lowercases the category", () => {
+		expect(parseExpense("300 GYM")).toEqual({ amount: 300, category: "gym", note: "" });
 	});
 });
 
@@ -295,5 +302,40 @@ describe("handleAddExpense", () => {
 		const body = await response.json() as { error: string };
 		expect(body.error).toBe("DB connection failed");
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB connection failed");
+	});
+});
+
+describe("handleDropPending", () => {
+	it("returns 500 when ADMIN_IDS is not configured", async () => {
+		const response = await handleDropPending(sql, 42, token, "https://example.com", undefined);
+
+		expect(response.status).toBe(500);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "ADMIN_IDS is not configured.");
+	});
+
+	it("returns 403 when user is not in the allowed list", async () => {
+		const response = await handleDropPending(sql, 42, token, "https://example.com", "999");
+
+		expect(response.status).toBe(403);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Unauthorized.");
+	});
+
+	it("calls dropPendingUpdates and replies when user is admin", async () => {
+		const response = await handleDropPending(sql, 42, token, "https://example.com", "42");
+		const body = await response.json() as { ok: boolean };
+
+		expect(body.ok).toBe(true);
+		expect(mockDropPendingUpdates).toHaveBeenCalledWith(token, "https://example.com");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Pending updates dropped.");
+	});
+
+	it("logs the error and sends a failure message when dropPendingUpdates throws", async () => {
+		mockDropPendingUpdates.mockRejectedValue(new Error("Telegram API error 400: Bad Request"));
+
+		const response = await handleDropPending(sql, 42, token, "https://example.com", "42");
+
+		expect(response.status).toBe(500);
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "Telegram API error 400: Bad Request");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Failed to drop pending updates.");
 	});
 });
