@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseExpense, handleReport, handleList, handleAddExpense } from "../src/handlers";
+import { parseExpense, handleReport, handleList, handleAddExpense, handleMigrate, handleLogs } from "../src/handlers";
 import type { Sql } from "../src/types";
 
-const { mockFetchReport, mockFetchRecent, mockSaveExpense, mockSendTelegramMessage } = vi.hoisted(() => ({
+const { mockFetchReport, mockFetchRecent, mockSaveExpense, mockMigrate, mockSaveLog, mockFetchLogs, mockSendTelegramMessage } = vi.hoisted(() => ({
 	mockFetchReport: vi.fn().mockResolvedValue([]),
 	mockFetchRecent: vi.fn().mockResolvedValue([]),
 	mockSaveExpense: vi.fn().mockResolvedValue(undefined),
+	mockMigrate: vi.fn().mockResolvedValue(undefined),
+	mockSaveLog: vi.fn().mockResolvedValue(undefined),
+	mockFetchLogs: vi.fn().mockResolvedValue([]),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -13,6 +16,9 @@ vi.mock("../src/db", () => ({
 	fetchReport: mockFetchReport,
 	fetchRecent: mockFetchRecent,
 	saveExpense: mockSaveExpense,
+	migrate: mockMigrate,
+	saveLog: mockSaveLog,
+	fetchLogs: mockFetchLogs,
 }));
 
 vi.mock("../src/telegram", () => ({
@@ -26,6 +32,9 @@ beforeEach(() => {
 	mockFetchReport.mockResolvedValue([]);
 	mockFetchRecent.mockResolvedValue([]);
 	mockSaveExpense.mockResolvedValue(undefined);
+	mockMigrate.mockResolvedValue(undefined);
+	mockSaveLog.mockResolvedValue(undefined);
+	mockFetchLogs.mockResolvedValue([]);
 	mockSendTelegramMessage.mockResolvedValue(undefined);
 });
 
@@ -91,6 +100,16 @@ describe("handleReport", () => {
 
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "date,amount,category,note");
 	});
+
+	it("logs the error and sends a generic message when fetchReport throws", async () => {
+		mockFetchReport.mockRejectedValue(new Error("DB connection failed"));
+
+		const response = await handleReport(sql, 42, token);
+
+		expect(response.status).toBe(500);
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB connection failed");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+	});
 });
 
 describe("handleList", () => {
@@ -128,6 +147,101 @@ describe("handleList", () => {
 
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "No expenses yet.");
 	});
+
+	it("logs the error and sends a generic message when fetchRecent throws", async () => {
+		mockFetchRecent.mockRejectedValue(new Error("DB connection failed"));
+
+		const response = await handleList(sql, 42, token);
+
+		expect(response.status).toBe(500);
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB connection failed");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+	});
+});
+
+describe("handleMigrate", () => {
+	it("returns 500 when ADMIN_IDS is not configured", async () => {
+		const response = await handleMigrate(sql, 42, token, undefined);
+
+		expect(response.status).toBe(500);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "ADMIN_IDS is not configured.");
+	});
+
+	it("returns 403 when user is not in the allowed list", async () => {
+		const response = await handleMigrate(sql, 42, token, "999,888");
+
+		expect(response.status).toBe(403);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Unauthorized.");
+	});
+
+	it("runs migration and replies when user is in the allowed list", async () => {
+		const response = await handleMigrate(sql, 42, token, "42,99");
+		const body = await response.json() as { ok: boolean };
+
+		expect(body.ok).toBe(true);
+		expect(mockMigrate).toHaveBeenCalledWith(sql);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Migration complete.");
+	});
+
+	it("trims spaces around IDs in ADMIN_IDS", async () => {
+		const response = await handleMigrate(sql, 42, token, " 42 , 99 ");
+		const body = await response.json() as { ok: boolean };
+
+		expect(body.ok).toBe(true);
+	});
+
+	it("logs the error and sends a failure message when migrate throws", async () => {
+		mockMigrate.mockRejectedValue(new Error("Migration error"));
+
+		const response = await handleMigrate(sql, 42, token, "42");
+
+		expect(response.status).toBe(500);
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "Migration error");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Migration failed.");
+	});
+});
+
+describe("handleLogs", () => {
+	it("returns 500 when ADMIN_IDS is not configured", async () => {
+		const response = await handleLogs(sql, 42, token, undefined);
+
+		expect(response.status).toBe(500);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "ADMIN_IDS is not configured.");
+	});
+
+	it("returns 403 when user is not in the allowed list", async () => {
+		const response = await handleLogs(sql, 42, token, "999,888");
+
+		expect(response.status).toBe(403);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Unauthorized.");
+	});
+
+	it("sends 'No logs.' when there are no logs", async () => {
+		await handleLogs(sql, 42, token, "42");
+
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "No logs.");
+	});
+
+	it("sends formatted log entries", async () => {
+		mockFetchLogs.mockResolvedValue([
+			{ message: "DB connection failed", created_at: "2026-01-01T10:00:00Z" },
+		]);
+
+		await handleLogs(sql, 42, token, "42");
+
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "[2026-01-01T10:00:00Z] DB connection failed");
+	});
+
+	it("returns rows in the response", async () => {
+		const rows = [{ message: "DB connection failed", created_at: "2026-01-01T10:00:00Z" }];
+		mockFetchLogs.mockResolvedValue(rows);
+
+		const response = await handleLogs(sql, 42, token, "42");
+		const body = await response.json() as { ok: boolean; rows: unknown[] };
+
+		expect(body.ok).toBe(true);
+		expect(body.rows).toEqual(rows);
+	});
 });
 
 describe("handleAddExpense", () => {
@@ -147,13 +261,14 @@ describe("handleAddExpense", () => {
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Saved: 300 gym");
 	});
 
-	it("returns 400 when parsing fails", async () => {
+	it("returns 400 and logs when parsing fails", async () => {
 		const response = await handleAddExpense(sql, 42, "300", token);
 
 		expect(response.status).toBe(400);
 		const body = await response.json() as { ok: boolean; error: string };
 		expect(body.ok).toBe(false);
 		expect(body.error).toBe("Use format: 300 gym");
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "Use format: 300 gym");
 	});
 
 	it("sends the error message to the user via Telegram on failure", async () => {
@@ -162,7 +277,7 @@ describe("handleAddExpense", () => {
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Use format: 300 gym");
 	});
 
-	it("returns 400 when the db throws", async () => {
+	it("returns 400 and logs when the db throws", async () => {
 		mockSaveExpense.mockRejectedValue(new Error("DB connection failed"));
 
 		const response = await handleAddExpense(sql, 42, "300 gym", token);
@@ -170,5 +285,6 @@ describe("handleAddExpense", () => {
 		expect(response.status).toBe(400);
 		const body = await response.json() as { error: string };
 		expect(body.error).toBe("DB connection failed");
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB connection failed");
 	});
 });
