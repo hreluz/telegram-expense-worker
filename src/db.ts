@@ -1,5 +1,18 @@
 import type { Sql, Expense } from "./types";
 
+export async function migrate(sql: Sql) {
+	await sql`
+		CREATE TABLE IF NOT EXISTS expenses (
+			id SERIAL PRIMARY KEY,
+			telegram_user_id BIGINT NOT NULL,
+			amount NUMERIC(10, 2) NOT NULL,
+			category TEXT NOT NULL,
+			note TEXT DEFAULT '',
+			created_at TIMESTAMPTZ DEFAULT NOW()
+		)
+	`;
+}
+
 export async function fetchReport(sql: Sql, telegramUserId: number) {
 	return sql`
 		SELECT created_at, amount, category, note

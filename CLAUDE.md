@@ -58,14 +58,17 @@ Expense messages follow `<amount> <category> [note]`. Parsed by `parseExpense` i
 
 ## Environment variables
 
-Both are required at runtime. For local dev, define them in `.dev.vars` (gitignored):
+All three are required at runtime. For local dev, define them in `.dev.vars` (gitignored):
 
 ```
 DATABASE_URL=your_neon_connection_string
 TELEGRAM_TOKEN=your_telegram_bot_token
+ADMIN_IDS=123456789,987654321
 ```
 
-For production, set via `wrangler secret put DATABASE_URL` and `wrangler secret put TELEGRAM_TOKEN`.
+`ADMIN_IDS` is a comma-separated list of Telegram user IDs allowed to run `/migrate`.
+
+For production, set via `wrangler secret put DATABASE_URL`, `wrangler secret put TELEGRAM_TOKEN`, and `wrangler secret put ADMIN_IDS`.
 
 ## Testing
 
