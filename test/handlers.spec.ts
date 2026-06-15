@@ -242,6 +242,15 @@ describe("handleLogs", () => {
 		expect(body.ok).toBe(true);
 		expect(body.rows).toEqual(rows);
 	});
+
+	it("returns 500 and sends a generic message when fetchLogs throws", async () => {
+		mockFetchLogs.mockRejectedValue(new Error("DB connection failed"));
+
+		const response = await handleLogs(sql, 42, token, "42");
+
+		expect(response.status).toBe(500);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+	});
 });
 
 describe("handleAddExpense", () => {

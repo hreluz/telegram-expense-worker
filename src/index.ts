@@ -17,6 +17,7 @@ export default {
 			return Response.json({ error: "No text found" }, { status: 400 });
 		}
 
+		if (text === "/start") return Response.json({ ok: true });
 		if (text === "/migrate") return handleMigrate(sql, telegramUserId, env.TELEGRAM_TOKEN, env.ADMIN_IDS);
 		if (text === "/logs") return handleLogs(sql, telegramUserId, env.TELEGRAM_TOKEN, env.ADMIN_IDS);
 		if (text === "/report") return handleReport(sql, telegramUserId, env.TELEGRAM_TOKEN);

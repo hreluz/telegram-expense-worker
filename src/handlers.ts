@@ -100,15 +100,21 @@ export async function handleMigrate(sql: Sql, telegramUserId: number, token: str
 export async function handleLogs(sql: Sql, telegramUserId: number, token: string, adminIds: string | undefined): Promise<Response> {
 	const unauthorized = await requireAdmin(sql, telegramUserId, token, adminIds);
 	if (unauthorized) return unauthorized;
-	const rows = await fetchLogs(sql, telegramUserId);
+	try {
+		const rows = await fetchLogs(sql, telegramUserId);
 
-	const text = rows.length
-		? rows.map((r) => `[${r.created_at}] ${r.message}`).join("\n")
-		: "No logs.";
+		const text = rows.length
+			? rows.map((r) => `[${r.created_at}] ${r.message}`).join("\n")
+			: "No logs.";
 
-	await trySend(sql, token, telegramUserId, text);
+		await trySend(sql, token, telegramUserId, text);
 
-	return Response.json({ ok: true, rows });
+		return Response.json({ ok: true, rows });
+	} catch (error) {
+		const message = error instanceof Error ? error.message : "Unknown error";
+		await trySend(sql, token, telegramUserId, "Something went wrong.");
+		return Response.json({ ok: false, error: message }, { status: 500 });
+	}
 }
 
 export async function handleAddExpense(sql: Sql, telegramUserId: number, text: string, token: string): Promise<Response> {
