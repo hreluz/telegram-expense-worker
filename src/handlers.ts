@@ -1,6 +1,21 @@
 import type { Sql, Expense } from "./types";
 import { fetchReport, fetchRecent, saveExpense, migrate, saveLog, fetchLogs } from "./db";
-import { sendTelegramMessage, dropPendingUpdates } from "./telegram";
+import { sendTelegramMessage, dropPendingUpdates, setTelegramCommands } from "./telegram";
+
+export const HELP_TEXT = `Expense Tracker Bot
+
+Log an expense:
+  300 gym
+  45.50 groceries weekly shopping
+  300 gym @2026-06-10
+  300 gym @2026-06-10 bought shoes
+
+Format: <amount> <category> [@YYYY-MM-DD] [note]
+
+Commands:
+  /list    — last 10 expenses
+  /report  — export full history as CSV
+  /help    — show this message`;
 
 async function trySend(sql: Sql, token: string, telegramUserId: number, text: string) {
 	try {
@@ -109,11 +124,17 @@ export async function handleList(sql: Sql, telegramUserId: number, token: string
 	}
 }
 
+export async function handleHelp(sql: Sql, telegramUserId: number, token: string): Promise<Response> {
+	await trySend(sql, token, telegramUserId, HELP_TEXT);
+	return Response.json({ ok: true });
+}
+
 export async function handleMigrate(sql: Sql, telegramUserId: number, token: string, adminIds: string | undefined): Promise<Response> {
 	const unauthorized = await requireAdmin(sql, telegramUserId, token, adminIds);
 	if (unauthorized) return unauthorized;
 	try {
 		await migrate(sql);
+		await setTelegramCommands(token);
 		await trySend(sql, token, telegramUserId, "Migration complete.");
 		return Response.json({ ok: true });
 	} catch (error) {

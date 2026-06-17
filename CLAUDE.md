@@ -38,19 +38,29 @@ This is a Cloudflare Worker acting as a Telegram bot webhook. Telegram POSTs upd
 ```
 src/types.ts     — shared types: Env, TelegramBody, Expense, Sql
 src/db.ts        — data access: fetchReport, fetchRecent, saveExpense (all SQL lives here)
-src/telegram.ts  — outbound API: sendTelegramMessage, dropPendingUpdates
+src/telegram.ts  — outbound API: sendTelegramMessage, dropPendingUpdates, setTelegramCommands
 src/handlers.ts  — command logic: parseExpense + one handler per command
 src/index.ts     — worker entry point: parse body, guard, dispatch to handler
 ```
 
 Each layer only imports from layers below it. `index.ts` knows about handlers; handlers know about `db` and `telegram`; neither knows about each other.
 
+### Available commands
+
+- `/start`, `/help` — send `HELP_TEXT` (format, examples, command list); `/start` is the entry point for new users
+- `/list` — last 10 expenses
+- `/report` — full history as CSV
+- `/migrate` — create DB tables + register bot commands menu via `setTelegramCommands` (admin only)
+- `/logs` — last 10 error log entries (admin only)
+- `/droppending` — flush Telegram's webhook retry queue (admin only)
+
 ### Adding a new command
 
 1. Add a query function in `src/db.ts`
 2. Add a handler in `src/handlers.ts` (call db, call `sendTelegramMessage`, return `Response.json`)
 3. Add one `if (text === "/command")` line in `src/index.ts`
-4. Add tests in the corresponding spec files
+4. If user-facing, add it to `HELP_TEXT` in `src/handlers.ts` and the `commands` array in `setTelegramCommands` in `src/telegram.ts`
+5. Add tests in the corresponding spec files
 
 ### Message format
 
