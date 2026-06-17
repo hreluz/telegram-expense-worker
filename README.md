@@ -21,7 +21,7 @@ Examples:
 45.50 groceries @2026-06-10 weekly shopping  # date can appear anywhere after category
 ```
 
-The `@date` token is optional and can appear anywhere after the category. If omitted, today's date is used. Categories are created automatically and stored in lowercase, so `GYM`, `Gym`, and `gym` all map to the same category.
+The `@date` token is optional and can appear anywhere after the category. If omitted, today's date is used. Categories are created automatically per user and stored in lowercase, so `GYM`, `Gym`, and `gym` all map to the same category.
 
 **List recent expenses** — send `/list` to get your last 10 entries. Add a date filter to see all expenses for a period:
 
@@ -69,7 +69,9 @@ Send `/migrate` from Telegram (you must be listed in `ADMIN_IDS`). Alternatively
 ```sql
 CREATE TABLE IF NOT EXISTS categories (
   id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE
+  telegram_user_id BIGINT NOT NULL,
+  name TEXT NOT NULL,
+  UNIQUE (telegram_user_id, name)
 );
 
 CREATE TABLE IF NOT EXISTS expenses (
