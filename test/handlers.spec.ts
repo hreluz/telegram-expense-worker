@@ -2,9 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { parseExpense, handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, HELP_TEXT } from "../src/handlers";
 import type { Sql } from "../src/types";
 
-const { mockFetchReport, mockFetchRecent, mockSaveExpense, mockMigrate, mockSaveLog, mockFetchLogs, mockSendTelegramMessage, mockSendTelegramDocument, mockDropPendingUpdates, mockSetTelegramCommands } = vi.hoisted(() => ({
+const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockMigrate, mockSaveLog, mockFetchLogs, mockSendTelegramMessage, mockSendTelegramDocument, mockDropPendingUpdates, mockSetTelegramCommands } = vi.hoisted(() => ({
 	mockFetchReport: vi.fn().mockResolvedValue([]),
 	mockFetchRecent: vi.fn().mockResolvedValue([]),
+	mockFetchCategoryTotals: vi.fn().mockResolvedValue([]),
 	mockSaveExpense: vi.fn().mockResolvedValue(undefined),
 	mockMigrate: vi.fn().mockResolvedValue(undefined),
 	mockSaveLog: vi.fn().mockResolvedValue(undefined),
@@ -18,6 +19,7 @@ const { mockFetchReport, mockFetchRecent, mockSaveExpense, mockMigrate, mockSave
 vi.mock("../src/db", () => ({
 	fetchReport: mockFetchReport,
 	fetchRecent: mockFetchRecent,
+	fetchCategoryTotals: mockFetchCategoryTotals,
 	saveExpense: mockSaveExpense,
 	migrate: mockMigrate,
 	saveLog: mockSaveLog,
@@ -38,6 +40,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	mockFetchReport.mockResolvedValue([]);
 	mockFetchRecent.mockResolvedValue([]);
+	mockFetchCategoryTotals.mockResolvedValue([]);
 	mockSaveExpense.mockResolvedValue(undefined);
 	mockMigrate.mockResolvedValue(undefined);
 	mockSaveLog.mockResolvedValue(undefined);
@@ -164,28 +167,28 @@ describe("handleReport", () => {
 	});
 
 	it("sends a filtered CSV with year and uses a named filename", async () => {
-		await handleReport(sql, 42, token, "2026");
+		await handleReport(sql, 42, token, 'expenses', "2026");
 
 		expect(mockFetchReport).toHaveBeenCalledWith(sql, 42, "2026");
 		expect(mockSendTelegramDocument).toHaveBeenCalledWith(token, 42, "expenses-2026.csv", "date,amount,category,note");
 	});
 
 	it("sends a filtered CSV with month and uses a named filename", async () => {
-		await handleReport(sql, 42, token, "2026-05");
+		await handleReport(sql, 42, token, 'expenses', "2026-05");
 
 		expect(mockFetchReport).toHaveBeenCalledWith(sql, 42, "2026-05");
 		expect(mockSendTelegramDocument).toHaveBeenCalledWith(token, 42, "expenses-2026-05.csv", "date,amount,category,note");
 	});
 
 	it("sends a filtered CSV with day and uses a named filename", async () => {
-		await handleReport(sql, 42, token, "2026-05-01");
+		await handleReport(sql, 42, token, 'expenses', "2026-05-01");
 
 		expect(mockFetchReport).toHaveBeenCalledWith(sql, 42, "2026-05-01");
 		expect(mockSendTelegramDocument).toHaveBeenCalledWith(token, 42, "expenses-2026-05-01.csv", "date,amount,category,note");
 	});
 
 	it("returns 400 and sends error when filter format is invalid", async () => {
-		const response = await handleReport(sql, 42, token, "june");
+		const response = await handleReport(sql, 42, token, 'expenses', "june");
 
 		expect(response.status).toBe(400);
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, expect.stringContaining("Invalid date filter"));
@@ -196,6 +199,51 @@ describe("handleReport", () => {
 		mockFetchReport.mockRejectedValue(new Error("DB connection failed"));
 
 		const response = await handleReport(sql, 42, token);
+
+		expect(response.status).toBe(500);
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB connection failed");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+	});
+});
+
+describe("handleReport categories", () => {
+	it("sends category totals as CSV", async () => {
+		mockFetchCategoryTotals.mockResolvedValue([
+			{ category: "gym", total: 500 },
+			{ category: "food", total: 200 },
+		]);
+
+		const response = await handleReport(sql, 42, token, 'categories');
+		const body = await response.json() as { ok: boolean; csv: string };
+
+		expect(body.ok).toBe(true);
+		expect(body.csv).toBe("category,total\ngym,500\nfood,200");
+	});
+
+	it("sends categories.csv filename with no filter", async () => {
+		await handleReport(sql, 42, token, 'categories');
+
+		expect(mockSendTelegramDocument).toHaveBeenCalledWith(token, 42, "categories.csv", "category,total");
+	});
+
+	it("sends named filename with filter", async () => {
+		await handleReport(sql, 42, token, 'categories', "2026-05");
+
+		expect(mockFetchCategoryTotals).toHaveBeenCalledWith(sql, 42, "2026-05");
+		expect(mockSendTelegramDocument).toHaveBeenCalledWith(token, 42, "categories-2026-05.csv", "category,total");
+	});
+
+	it("returns 400 and sends error when filter format is invalid", async () => {
+		const response = await handleReport(sql, 42, token, 'categories', "june");
+
+		expect(response.status).toBe(400);
+		expect(mockFetchCategoryTotals).not.toHaveBeenCalled();
+	});
+
+	it("logs the error and sends a generic message when fetchCategoryTotals throws", async () => {
+		mockFetchCategoryTotals.mockRejectedValue(new Error("DB connection failed"));
+
+		const response = await handleReport(sql, 42, token, 'categories');
 
 		expect(response.status).toBe(500);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB connection failed");
@@ -240,25 +288,25 @@ describe("handleList", () => {
 	});
 
 	it("passes year filter to fetchRecent", async () => {
-		await handleList(sql, 42, token, "2026");
+		await handleList(sql, 42, token, 'expenses', "2026");
 
 		expect(mockFetchRecent).toHaveBeenCalledWith(sql, 42, "2026");
 	});
 
 	it("passes month filter to fetchRecent", async () => {
-		await handleList(sql, 42, token, "2026-05");
+		await handleList(sql, 42, token, 'expenses', "2026-05");
 
 		expect(mockFetchRecent).toHaveBeenCalledWith(sql, 42, "2026-05");
 	});
 
 	it("passes day filter to fetchRecent", async () => {
-		await handleList(sql, 42, token, "2026-05-01");
+		await handleList(sql, 42, token, 'expenses', "2026-05-01");
 
 		expect(mockFetchRecent).toHaveBeenCalledWith(sql, 42, "2026-05-01");
 	});
 
 	it("returns 400 and sends error when filter format is invalid", async () => {
-		const response = await handleList(sql, 42, token, "june");
+		const response = await handleList(sql, 42, token, 'expenses', "june");
 
 		expect(response.status).toBe(400);
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, expect.stringContaining("Invalid date filter"));
@@ -269,6 +317,48 @@ describe("handleList", () => {
 		mockFetchRecent.mockRejectedValue(new Error("DB connection failed"));
 
 		const response = await handleList(sql, 42, token);
+
+		expect(response.status).toBe(500);
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB connection failed");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+	});
+});
+
+describe("handleList categories", () => {
+	it("sends category totals as a message", async () => {
+		mockFetchCategoryTotals.mockResolvedValue([
+			{ category: "gym", total: 500 },
+			{ category: "food", total: 200 },
+		]);
+
+		await handleList(sql, 42, token, 'categories');
+
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "gym  500\nfood  200");
+	});
+
+	it("sends 'No expenses yet.' when there are no rows", async () => {
+		await handleList(sql, 42, token, 'categories');
+
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "No expenses yet.");
+	});
+
+	it("passes filter to fetchCategoryTotals", async () => {
+		await handleList(sql, 42, token, 'categories', "2026-05");
+
+		expect(mockFetchCategoryTotals).toHaveBeenCalledWith(sql, 42, "2026-05");
+	});
+
+	it("returns 400 when filter format is invalid", async () => {
+		const response = await handleList(sql, 42, token, 'categories', "june");
+
+		expect(response.status).toBe(400);
+		expect(mockFetchCategoryTotals).not.toHaveBeenCalled();
+	});
+
+	it("logs the error and sends a generic message when fetchCategoryTotals throws", async () => {
+		mockFetchCategoryTotals.mockRejectedValue(new Error("DB connection failed"));
+
+		const response = await handleList(sql, 42, token, 'categories');
 
 		expect(response.status).toBe(500);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB connection failed");

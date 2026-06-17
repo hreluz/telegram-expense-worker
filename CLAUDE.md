@@ -37,7 +37,7 @@ This is a Cloudflare Worker acting as a Telegram bot webhook. Telegram POSTs upd
 
 ```
 src/types.ts     — shared types: Env, TelegramBody, Expense, Sql
-src/db.ts        — data access: fetchReport, fetchRecent, saveExpense (all SQL lives here)
+src/db.ts        — data access: fetchReport, fetchRecent, fetchCategoryTotals, saveExpense (all SQL lives here)
 src/telegram.ts  — outbound API: sendTelegramMessage, dropPendingUpdates, setTelegramCommands
 src/handlers.ts  — command logic: parseExpense + one handler per command
 src/index.ts     — worker entry point: parse body, guard, dispatch to handler
@@ -48,8 +48,8 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 ### Available commands
 
 - `/start`, `/help` — send `HELP_TEXT` (format, examples, command list); `/start` is the entry point for new users
-- `/list [filter]` — last 10 expenses; with a date filter (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`) returns all matching expenses with no limit
-- `/report [filter]` — full history as a `.csv` file attachment; same date filter syntax scopes the export and names the file (e.g. `expenses-2026-05.csv`)
+- `/list [categories|expenses] [filter]` — last 10 expenses (default view `expenses`); with a date filter (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`) returns all matching expenses with no limit. With `categories` view, returns per-category totals as a text message instead.
+- `/report [categories|expenses] [filter]` — full history as a `.csv` file attachment; same date filter syntax scopes the export. With `categories` view, sends category totals CSV (e.g. `categories-2026-05.csv`); with `expenses` view, names the file `expenses-2026-05.csv`.
 - `/migrate` — create DB tables + register bot commands menu via `setTelegramCommands` (admin only)
 - `/logs` — last 10 error log entries (admin only)
 - `/droppending` — flush Telegram's webhook retry queue (admin only)

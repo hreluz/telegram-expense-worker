@@ -23,22 +23,26 @@ Examples:
 
 The `@date` token is optional and can appear anywhere after the category. If omitted, today's date is used. Categories are created automatically per user and stored in lowercase, so `GYM`, `Gym`, and `gym` all map to the same category.
 
-**List recent expenses** — send `/list` to get your last 10 entries. Add a date filter to see all expenses for a period:
+**List recent expenses** — send `/list` to get your last 10 entries. Add a date filter to see all expenses for a period. Add `categories` to see totals grouped by category instead:
 
 ```
-/list              # last 10 expenses
-/list 2026         # all expenses in 2026
-/list 2026-05      # all expenses in May 2026
-/list 2026-05-01   # all expenses on a specific day
+/list                        # last 10 expenses
+/list 2026                   # all expenses in 2026
+/list 2026-05                # all expenses in May 2026
+/list 2026-05-01             # all expenses on a specific day
+/list categories             # totals per category, all time
+/list categories 2026-05     # totals per category for May 2026
 ```
 
-**Export expenses as CSV** — send `/report` to receive your full history as a `.csv` file. Add a date filter to scope the export:
+**Export expenses as CSV** — send `/report` to receive your full history as a `.csv` file. Add a date filter to scope the export. Use `categories` to export totals grouped by category instead:
 
 ```
-/report              # all expenses
-/report 2026         # expenses for 2026  →  expenses-2026.csv
-/report 2026-05      # expenses for May   →  expenses-2026-05.csv
-/report 2026-05-01   # expenses for a day →  expenses-2026-05-01.csv
+/report                        # all expenses           →  expenses.csv
+/report 2026                   # expenses for 2026      →  expenses-2026.csv
+/report 2026-05                # expenses for May       →  expenses-2026-05.csv
+/report 2026-05-01             # expenses for a day     →  expenses-2026-05-01.csv
+/report categories             # category totals        →  categories.csv
+/report categories 2026-05     # category totals, May   →  categories-2026-05.csv
 ```
 
 **Show help** — send `/help` (or `/start`) to see the expense format, examples, and available commands.
