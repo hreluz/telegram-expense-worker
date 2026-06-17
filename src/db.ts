@@ -45,9 +45,20 @@ export async function fetchLogs(sql: Sql, telegramUserId: number) {
 	`;
 }
 
-export async function fetchReport(sql: Sql, telegramUserId: number) {
+export async function fetchReport(sql: Sql, telegramUserId: number, filter?: string) {
+	if (filter) {
+		const pattern = `${filter}%`;
+		return sql`
+			SELECT e.expense_date::text AS expense_date, e.amount, c.name AS category, e.note
+			FROM expenses e
+			JOIN categories c ON c.id = e.category_id
+			WHERE e.telegram_user_id = ${telegramUserId}
+				AND e.expense_date::text LIKE ${pattern}
+			ORDER BY e.expense_date DESC, e.created_at DESC
+		`;
+	}
 	return sql`
-		SELECT e.expense_date, e.amount, c.name AS category, e.note
+		SELECT e.expense_date::text AS expense_date, e.amount, c.name AS category, e.note
 		FROM expenses e
 		JOIN categories c ON c.id = e.category_id
 		WHERE e.telegram_user_id = ${telegramUserId}
@@ -55,9 +66,20 @@ export async function fetchReport(sql: Sql, telegramUserId: number) {
 	`;
 }
 
-export async function fetchRecent(sql: Sql, telegramUserId: number) {
+export async function fetchRecent(sql: Sql, telegramUserId: number, filter?: string) {
+	if (filter) {
+		const pattern = `${filter}%`;
+		return sql`
+			SELECT e.amount, c.name AS category, e.note, e.expense_date::text AS expense_date, e.created_at
+			FROM expenses e
+			JOIN categories c ON c.id = e.category_id
+			WHERE e.telegram_user_id = ${telegramUserId}
+				AND e.expense_date::text LIKE ${pattern}
+			ORDER BY e.expense_date DESC, e.created_at DESC
+		`;
+	}
 	return sql`
-		SELECT e.amount, c.name AS category, e.note, e.expense_date, e.created_at
+		SELECT e.amount, c.name AS category, e.note, e.expense_date::text AS expense_date, e.created_at
 		FROM expenses e
 		JOIN categories c ON c.id = e.category_id
 		WHERE e.telegram_user_id = ${telegramUserId}

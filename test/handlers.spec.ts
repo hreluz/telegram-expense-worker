@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { parseExpense, handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, HELP_TEXT } from "../src/handlers";
 import type { Sql } from "../src/types";
 
-const { mockFetchReport, mockFetchRecent, mockSaveExpense, mockMigrate, mockSaveLog, mockFetchLogs, mockSendTelegramMessage, mockDropPendingUpdates, mockSetTelegramCommands } = vi.hoisted(() => ({
+const { mockFetchReport, mockFetchRecent, mockSaveExpense, mockMigrate, mockSaveLog, mockFetchLogs, mockSendTelegramMessage, mockSendTelegramDocument, mockDropPendingUpdates, mockSetTelegramCommands } = vi.hoisted(() => ({
 	mockFetchReport: vi.fn().mockResolvedValue([]),
 	mockFetchRecent: vi.fn().mockResolvedValue([]),
 	mockSaveExpense: vi.fn().mockResolvedValue(undefined),
@@ -10,6 +10,7 @@ const { mockFetchReport, mockFetchRecent, mockSaveExpense, mockMigrate, mockSave
 	mockSaveLog: vi.fn().mockResolvedValue(undefined),
 	mockFetchLogs: vi.fn().mockResolvedValue([]),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
+	mockSendTelegramDocument: vi.fn().mockResolvedValue(undefined),
 	mockDropPendingUpdates: vi.fn().mockResolvedValue(undefined),
 	mockSetTelegramCommands: vi.fn().mockResolvedValue(undefined),
 }));
@@ -25,6 +26,7 @@ vi.mock("../src/db", () => ({
 
 vi.mock("../src/telegram", () => ({
 	sendTelegramMessage: mockSendTelegramMessage,
+	sendTelegramDocument: mockSendTelegramDocument,
 	dropPendingUpdates: mockDropPendingUpdates,
 	setTelegramCommands: mockSetTelegramCommands,
 }));
@@ -33,6 +35,7 @@ const sql = {} as unknown as Sql;
 const token = "test-token";
 
 beforeEach(() => {
+	vi.clearAllMocks();
 	mockFetchReport.mockResolvedValue([]);
 	mockFetchRecent.mockResolvedValue([]);
 	mockSaveExpense.mockResolvedValue(undefined);
@@ -40,6 +43,7 @@ beforeEach(() => {
 	mockSaveLog.mockResolvedValue(undefined);
 	mockFetchLogs.mockResolvedValue([]);
 	mockSendTelegramMessage.mockResolvedValue(undefined);
+	mockSendTelegramDocument.mockResolvedValue(undefined);
 	mockDropPendingUpdates.mockResolvedValue(undefined);
 	mockSetTelegramCommands.mockResolvedValue(undefined);
 });
@@ -153,10 +157,39 @@ describe("handleReport", () => {
 		);
 	});
 
-	it("sends the CSV to the user via Telegram", async () => {
+	it("sends the CSV as a file to the user via Telegram", async () => {
 		await handleReport(sql, 42, token);
 
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "date,amount,category,note");
+		expect(mockSendTelegramDocument).toHaveBeenCalledWith(token, 42, "expenses.csv", "date,amount,category,note");
+	});
+
+	it("sends a filtered CSV with year and uses a named filename", async () => {
+		await handleReport(sql, 42, token, "2026");
+
+		expect(mockFetchReport).toHaveBeenCalledWith(sql, 42, "2026");
+		expect(mockSendTelegramDocument).toHaveBeenCalledWith(token, 42, "expenses-2026.csv", "date,amount,category,note");
+	});
+
+	it("sends a filtered CSV with month and uses a named filename", async () => {
+		await handleReport(sql, 42, token, "2026-05");
+
+		expect(mockFetchReport).toHaveBeenCalledWith(sql, 42, "2026-05");
+		expect(mockSendTelegramDocument).toHaveBeenCalledWith(token, 42, "expenses-2026-05.csv", "date,amount,category,note");
+	});
+
+	it("sends a filtered CSV with day and uses a named filename", async () => {
+		await handleReport(sql, 42, token, "2026-05-01");
+
+		expect(mockFetchReport).toHaveBeenCalledWith(sql, 42, "2026-05-01");
+		expect(mockSendTelegramDocument).toHaveBeenCalledWith(token, 42, "expenses-2026-05-01.csv", "date,amount,category,note");
+	});
+
+	it("returns 400 and sends error when filter format is invalid", async () => {
+		const response = await handleReport(sql, 42, token, "june");
+
+		expect(response.status).toBe(400);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, expect.stringContaining("Invalid date filter"));
+		expect(mockFetchReport).not.toHaveBeenCalled();
 	});
 
 	it("logs the error and sends a generic message when fetchReport throws", async () => {
@@ -172,7 +205,7 @@ describe("handleReport", () => {
 
 describe("handleList", () => {
 	it("returns rows", async () => {
-		const rows = [{ amount: 200, category: "transport", note: "taxi", created_at: "2026-01-01" }];
+		const rows = [{ amount: 200, category: "transport", note: "taxi", expense_date: "2026-01-01", created_at: "2026-01-01T00:00:00Z" }];
 		mockFetchRecent.mockResolvedValue(rows);
 
 		const response = await handleList(sql, 42, token);
@@ -191,19 +224,45 @@ describe("handleList", () => {
 
 	it("sends formatted list to the user via Telegram", async () => {
 		mockFetchRecent.mockResolvedValue([
-			{ amount: 200, category: "transport", note: "taxi", created_at: "2026-01-01" },
-			{ amount: 50, category: "gym", note: null, created_at: "2026-01-02" },
+			{ amount: 200, category: "transport", note: "taxi", expense_date: "2026-01-02", created_at: "2026-01-02T00:00:00Z" },
+			{ amount: 50, category: "gym", note: null, expense_date: "2026-01-01", created_at: "2026-01-01T00:00:00Z" },
 		]);
 
 		await handleList(sql, 42, token);
 
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "200 transport (taxi)\n50 gym");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "2026-01-02  200 transport (taxi)\n2026-01-01  50 gym");
 	});
 
 	it("sends 'No expenses yet.' when list is empty", async () => {
 		await handleList(sql, 42, token);
 
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "No expenses yet.");
+	});
+
+	it("passes year filter to fetchRecent", async () => {
+		await handleList(sql, 42, token, "2026");
+
+		expect(mockFetchRecent).toHaveBeenCalledWith(sql, 42, "2026");
+	});
+
+	it("passes month filter to fetchRecent", async () => {
+		await handleList(sql, 42, token, "2026-05");
+
+		expect(mockFetchRecent).toHaveBeenCalledWith(sql, 42, "2026-05");
+	});
+
+	it("passes day filter to fetchRecent", async () => {
+		await handleList(sql, 42, token, "2026-05-01");
+
+		expect(mockFetchRecent).toHaveBeenCalledWith(sql, 42, "2026-05-01");
+	});
+
+	it("returns 400 and sends error when filter format is invalid", async () => {
+		const response = await handleList(sql, 42, token, "june");
+
+		expect(response.status).toBe(400);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, expect.stringContaining("Invalid date filter"));
+		expect(mockFetchRecent).not.toHaveBeenCalled();
 	});
 
 	it("logs the error and sends a generic message when fetchRecent throws", async () => {

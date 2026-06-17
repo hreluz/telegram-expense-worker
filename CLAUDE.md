@@ -48,8 +48,8 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 ### Available commands
 
 - `/start`, `/help` — send `HELP_TEXT` (format, examples, command list); `/start` is the entry point for new users
-- `/list` — last 10 expenses
-- `/report` — full history as CSV
+- `/list [filter]` — last 10 expenses; with a date filter (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`) returns all matching expenses with no limit
+- `/report [filter]` — full history as a `.csv` file attachment; same date filter syntax scopes the export and names the file (e.g. `expenses-2026-05.csv`)
 - `/migrate` — create DB tables + register bot commands menu via `setTelegramCommands` (admin only)
 - `/logs` — last 10 error log entries (admin only)
 - `/droppending` — flush Telegram's webhook retry queue (admin only)
@@ -91,7 +91,7 @@ const { mockFn } = vi.hoisted(() => ({ mockFn: vi.fn().mockResolvedValue([]) }))
 vi.mock("../src/db", () => ({ fetchReport: mockFn }));
 ```
 
-**Reset pattern** — use a top-level `beforeEach` to reset mock return values. `vi.clearAllMocks()` only clears call history, not implementations — always re-set `.mockResolvedValue(...)` in `beforeEach` to prevent bleed between tests.
+**Reset pattern** — use a top-level `beforeEach` that calls `vi.clearAllMocks()` (clears call history) followed by re-setting `.mockResolvedValue(...)` on each mock (restores implementations). Both steps are needed: `vi.clearAllMocks()` alone leaves stale return values; re-setting alone leaves stale call history that breaks `toHaveBeenCalledOnce` and `not.toHaveBeenCalled` assertions.
 
 **Test structure per layer:**
 - `test/db.spec.ts` — passes a mock sql function directly; verifies each function calls sql and returns its result

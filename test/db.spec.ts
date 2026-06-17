@@ -11,7 +11,7 @@ describe("db", () => {
 	});
 
 	describe("fetchReport", () => {
-		it("returns rows from sql", async () => {
+		it("returns rows from sql with no filter", async () => {
 			const rows = [{ created_at: "2026-01-01", amount: 100, category: "food", note: "lunch" }];
 			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue(rows);
 
@@ -20,16 +20,52 @@ describe("db", () => {
 			expect(result).toEqual(rows);
 			expect(mockSql).toHaveBeenCalledOnce();
 		});
+
+		it("calls sql with year filter", async () => {
+			await fetchReport(mockSql, 42, "2026");
+
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("calls sql with month filter", async () => {
+			await fetchReport(mockSql, 42, "2026-05");
+
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("calls sql with day filter", async () => {
+			await fetchReport(mockSql, 42, "2026-05-01");
+
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
 	});
 
 	describe("fetchRecent", () => {
-		it("returns rows from sql", async () => {
+		it("returns rows from sql with no filter", async () => {
 			const rows = [{ amount: 50, category: "gym", note: null, created_at: "2026-01-01" }];
 			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue(rows);
 
 			const result = await fetchRecent(mockSql, 42);
 
 			expect(result).toEqual(rows);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("calls sql with year filter", async () => {
+			await fetchRecent(mockSql, 42, "2026");
+
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("calls sql with month filter", async () => {
+			await fetchRecent(mockSql, 42, "2026-05");
+
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("calls sql with day filter", async () => {
+			await fetchRecent(mockSql, 42, "2026-05-01");
+
 			expect(mockSql).toHaveBeenCalledOnce();
 		});
 	});
