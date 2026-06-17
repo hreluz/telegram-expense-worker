@@ -1,6 +1,6 @@
 import type { Sql, Expense } from "./types";
 import { fetchReport, fetchRecent, saveExpense, migrate, saveLog, fetchLogs } from "./db";
-import { sendTelegramMessage, dropPendingUpdates, setTelegramCommands } from "./telegram";
+import { sendTelegramMessage, sendTelegramDocument, dropPendingUpdates, setTelegramCommands } from "./telegram";
 
 export const HELP_TEXT = `Expense Tracker Bot
 
@@ -13,9 +13,13 @@ Log an expense:
 Format: <amount> <category> [@YYYY-MM-DD] [note]
 
 Commands:
-  /list    — last 10 expenses
-  /report  — export full history as CSV
-  /help    — show this message`;
+  /list                — last 10 expenses
+  /list 2026-05        — filter by year, month, or day
+  /report              — full history as CSV file
+  /report 2026-05      — filtered CSV for a period
+  /help                — show this message
+
+Date filter format: YYYY, YYYY-MM, or YYYY-MM-DD`;
 
 async function trySend(sql: Sql, token: string, telegramUserId: number, text: string) {
 	try {
@@ -84,9 +88,22 @@ export function parseExpense(text: string): Expense {
 	return { amount, category, note: noteTokens.join(" "), expenseDate: expenseDate ?? todayIso() };
 }
 
-export async function handleReport(sql: Sql, telegramUserId: number, token: string): Promise<Response> {
+const FILTER_RE = /^\d{4}(-\d{2}(-\d{2})?)?$/;
+
+async function validateFilter(sql: Sql, token: string, telegramUserId: number, filter: string | undefined): Promise<Response | null> {
+	if (filter && !FILTER_RE.test(filter)) {
+		await trySend(sql, token, telegramUserId, "Invalid date filter. Use YYYY, YYYY-MM, or YYYY-MM-DD");
+		return Response.json({ ok: false, error: "Invalid filter" }, { status: 400 });
+	}
+	return null;
+}
+
+export async function handleReport(sql: Sql, telegramUserId: number, token: string, filter?: string): Promise<Response> {
+	const invalid = await validateFilter(sql, token, telegramUserId, filter);
+	if (invalid) return invalid;
+
 	try {
-		const rows = await fetchReport(sql, telegramUserId);
+		const rows = await fetchReport(sql, telegramUserId, filter);
 
 		const header = "date,amount,category,note";
 		const csvRows = rows.map((row) =>
@@ -94,7 +111,8 @@ export async function handleReport(sql: Sql, telegramUserId: number, token: stri
 		);
 		const csv = [header, ...csvRows].join("\n");
 
-		await sendTelegramMessage(token, telegramUserId, csv);
+		const filename = filter ? `expenses-${filter}.csv` : 'expenses.csv';
+		await sendTelegramDocument(token, telegramUserId, filename, csv);
 
 		return Response.json({ ok: true, csv });
 	} catch (error) {
@@ -105,12 +123,15 @@ export async function handleReport(sql: Sql, telegramUserId: number, token: stri
 	}
 }
 
-export async function handleList(sql: Sql, telegramUserId: number, token: string): Promise<Response> {
+export async function handleList(sql: Sql, telegramUserId: number, token: string, filter?: string): Promise<Response> {
+	const invalid = await validateFilter(sql, token, telegramUserId, filter);
+	if (invalid) return invalid;
+
 	try {
-		const rows = await fetchRecent(sql, telegramUserId);
+		const rows = await fetchRecent(sql, telegramUserId, filter);
 
 		const text = rows.length
-			? rows.map((r) => `${r.amount} ${r.category}${r.note ? ` (${r.note})` : ""}`).join("\n")
+			? rows.map((r) => `${r.expense_date}  ${r.amount} ${r.category}${r.note ? ` (${r.note})` : ""}`).join("\n")
 			: "No expenses yet.";
 
 		await sendTelegramMessage(token, telegramUserId, text);

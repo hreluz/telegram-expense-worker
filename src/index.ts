@@ -22,8 +22,14 @@ export default {
 		if (text === "/migrate") return handleMigrate(sql, telegramUserId, env.TELEGRAM_TOKEN, env.ADMIN_IDS);
 		if (text === "/logs") return handleLogs(sql, telegramUserId, env.TELEGRAM_TOKEN, env.ADMIN_IDS);
 		if (text === "/droppending") return handleDropPending(sql, telegramUserId, env.TELEGRAM_TOKEN, new URL(request.url).origin, env.ADMIN_IDS);
-		if (text === "/report") return handleReport(sql, telegramUserId, env.TELEGRAM_TOKEN);
-		if (text === "/list") return handleList(sql, telegramUserId, env.TELEGRAM_TOKEN);
+		if (text.startsWith("/report")) {
+			const filter = text.slice(7).trim() || undefined;
+			return handleReport(sql, telegramUserId, env.TELEGRAM_TOKEN, filter);
+		}
+		if (text.startsWith("/list")) {
+			const filter = text.slice(5).trim() || undefined;
+			return handleList(sql, telegramUserId, env.TELEGRAM_TOKEN, filter);
+		}
 
 		return handleAddExpense(sql, telegramUserId, text, env.TELEGRAM_TOKEN);
 	},

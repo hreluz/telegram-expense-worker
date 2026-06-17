@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { sendTelegramMessage, dropPendingUpdates, setTelegramCommands } from "../src/telegram";
+import { sendTelegramMessage, sendTelegramDocument, dropPendingUpdates, setTelegramCommands } from "../src/telegram";
 
 const mockFetch = vi.fn().mockResolvedValue(new Response());
 
@@ -30,6 +30,37 @@ describe("sendTelegramMessage", () => {
 		);
 
 		await expect(sendTelegramMessage("mytoken", 42, "Hello!")).rejects.toThrow("Telegram API error 400:");
+	});
+});
+
+describe("sendTelegramDocument", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockFetch.mockResolvedValue(new Response());
+	});
+
+	it("calls the sendDocument endpoint", async () => {
+		await sendTelegramDocument("mytoken", 42, "expenses.csv", "date,amount\n2026-01-01,100");
+
+		const [url] = mockFetch.mock.calls[0];
+		expect(url).toBe("https://api.telegram.org/botmytoken/sendDocument");
+	});
+
+	it("sends chat_id and document as multipart form data", async () => {
+		await sendTelegramDocument("mytoken", 42, "expenses.csv", "date,amount\n2026-01-01,100");
+
+		const [, options] = mockFetch.mock.calls[0];
+		expect(options.method).toBe("POST");
+		expect(options.body).toBeInstanceOf(FormData);
+		const form = options.body as FormData;
+		expect(form.get("chat_id")).toBe("42");
+		expect(form.get("document")).toBeInstanceOf(Blob);
+	});
+
+	it("throws when the Telegram API returns an error", async () => {
+		mockFetch.mockResolvedValue(new Response("Bad Request", { status: 400 }));
+
+		await expect(sendTelegramDocument("mytoken", 42, "expenses.csv", "data")).rejects.toThrow("Telegram API error 400:");
 	});
 });
 

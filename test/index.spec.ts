@@ -2,9 +2,10 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import worker from "../src/index";
 
-const { mockSql, mockSendTelegramMessage, mockDropPendingUpdates, mockSetTelegramCommands } = vi.hoisted(() => ({
+const { mockSql, mockSendTelegramMessage, mockSendTelegramDocument, mockDropPendingUpdates, mockSetTelegramCommands } = vi.hoisted(() => ({
 	mockSql: vi.fn().mockResolvedValue([]),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
+	mockSendTelegramDocument: vi.fn().mockResolvedValue(undefined),
 	mockDropPendingUpdates: vi.fn().mockResolvedValue(undefined),
 	mockSetTelegramCommands: vi.fn().mockResolvedValue(undefined),
 }));
@@ -15,6 +16,7 @@ vi.mock("@neondatabase/serverless", () => ({
 
 vi.mock("../src/telegram", () => ({
 	sendTelegramMessage: mockSendTelegramMessage,
+	sendTelegramDocument: mockSendTelegramDocument,
 	dropPendingUpdates: mockDropPendingUpdates,
 	setTelegramCommands: mockSetTelegramCommands,
 }));
@@ -39,6 +41,7 @@ describe("telegram-expense-worker", () => {
 		vi.clearAllMocks();
 		mockSql.mockResolvedValue([]);
 		mockSendTelegramMessage.mockResolvedValue(undefined);
+		mockSendTelegramDocument.mockResolvedValue(undefined);
 		mockSetTelegramCommands.mockResolvedValue(undefined);
 	});
 
@@ -210,6 +213,25 @@ describe("telegram-expense-worker", () => {
 			const body = await response.json() as { ok: boolean; csv: string };
 			expect(body.csv).toBe("date,amount,category,note");
 		});
+
+		it("returns 400 when filter is invalid", async () => {
+			const request = postRequest(telegramMessage("/report june"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(400);
+		});
+
+		it("passes year filter when given /report 2026", async () => {
+			const request = postRequest(telegramMessage("/report 2026"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean; csv: string };
+			expect(body.ok).toBe(true);
+		});
 	});
 
 	describe("/list", () => {
@@ -237,6 +259,25 @@ describe("telegram-expense-worker", () => {
 
 			const body = await response.json() as { ok: boolean; rows: unknown[] };
 			expect(body.rows).toEqual([]);
+		});
+
+		it("passes year filter when given /list 2026", async () => {
+			const request = postRequest(telegramMessage("/list 2026"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+		});
+
+		it("returns 400 when filter is invalid", async () => {
+			const request = postRequest(telegramMessage("/list june"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(400);
 		});
 	});
 
