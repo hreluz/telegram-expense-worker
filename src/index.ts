@@ -2,6 +2,14 @@ import { neon } from "@neondatabase/serverless";
 import type { Env, TelegramBody } from "./types";
 import { handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp } from "./handlers";
 
+function parseViewAndFilter(args: string): { view: 'expenses' | 'categories'; filter: string | undefined } {
+	const [first, ...rest] = args.split(/\s+/);
+	if (first === 'categories' || first === 'expenses') {
+		return { view: first, filter: rest.join(' ') || undefined };
+	}
+	return { view: 'expenses', filter: args || undefined };
+}
+
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		if (request.method !== "POST") {
@@ -23,12 +31,14 @@ export default {
 		if (text === "/logs") return handleLogs(sql, telegramUserId, env.TELEGRAM_TOKEN, env.ADMIN_IDS);
 		if (text === "/droppending") return handleDropPending(sql, telegramUserId, env.TELEGRAM_TOKEN, new URL(request.url).origin, env.ADMIN_IDS);
 		if (text.startsWith("/report")) {
-			const filter = text.slice(7).trim() || undefined;
-			return handleReport(sql, telegramUserId, env.TELEGRAM_TOKEN, filter);
+			const args = text.slice(7).trim();
+			const { view, filter } = parseViewAndFilter(args);
+			return handleReport(sql, telegramUserId, env.TELEGRAM_TOKEN, view, filter);
 		}
 		if (text.startsWith("/list")) {
-			const filter = text.slice(5).trim() || undefined;
-			return handleList(sql, telegramUserId, env.TELEGRAM_TOKEN, filter);
+			const args = text.slice(5).trim();
+			const { view, filter } = parseViewAndFilter(args);
+			return handleList(sql, telegramUserId, env.TELEGRAM_TOKEN, view, filter);
 		}
 
 		return handleAddExpense(sql, telegramUserId, text, env.TELEGRAM_TOKEN);

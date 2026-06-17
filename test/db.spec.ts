@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchReport, fetchRecent, saveExpense, migrate, saveLog, fetchLogs } from "../src/db";
+import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs } from "../src/db";
 import type { Sql } from "../src/types";
 
 describe("db", () => {
@@ -133,6 +133,36 @@ describe("db", () => {
 			const result = await fetchLogs(mockSql, 42);
 
 			expect(result).toEqual(rows);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("fetchCategoryTotals", () => {
+		it("returns rows from sql with no filter", async () => {
+			const rows = [{ category: "gym", total: 500 }, { category: "food", total: 200 }];
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue(rows);
+
+			const result = await fetchCategoryTotals(mockSql, 42);
+
+			expect(result).toEqual(rows);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("calls sql with year filter", async () => {
+			await fetchCategoryTotals(mockSql, 42, "2026");
+
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("calls sql with month filter", async () => {
+			await fetchCategoryTotals(mockSql, 42, "2026-05");
+
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("calls sql with day filter", async () => {
+			await fetchCategoryTotals(mockSql, 42, "2026-05-01");
+
 			expect(mockSql).toHaveBeenCalledOnce();
 		});
 	});

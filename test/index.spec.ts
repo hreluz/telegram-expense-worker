@@ -232,6 +232,36 @@ describe("telegram-expense-worker", () => {
 			const body = await response.json() as { ok: boolean; csv: string };
 			expect(body.ok).toBe(true);
 		});
+
+		it("returns category CSV with header when given /report categories", async () => {
+			const request = postRequest(telegramMessage("/report categories"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean; csv: string };
+			expect(body.ok).toBe(true);
+			expect(body.csv).toBe("category,total");
+		});
+
+		it("returns category CSV for a period when given /report categories 2026-05", async () => {
+			const request = postRequest(telegramMessage("/report categories 2026-05"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean; csv: string };
+			expect(body.ok).toBe(true);
+		});
+
+		it("returns 400 when given /report categories with invalid filter", async () => {
+			const request = postRequest(telegramMessage("/report categories june"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(400);
+		});
 	});
 
 	describe("/list", () => {
@@ -273,6 +303,36 @@ describe("telegram-expense-worker", () => {
 
 		it("returns 400 when filter is invalid", async () => {
 			const request = postRequest(telegramMessage("/list june"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(400);
+		});
+
+		it("returns category rows when given /list categories", async () => {
+			const request = postRequest(telegramMessage("/list categories"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean; rows: unknown[] };
+			expect(body.ok).toBe(true);
+			expect(body.rows).toEqual([]);
+		});
+
+		it("returns category rows for a period when given /list categories 2026-05", async () => {
+			const request = postRequest(telegramMessage("/list categories 2026-05"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+		});
+
+		it("returns 400 when given /list categories with invalid filter", async () => {
+			const request = postRequest(telegramMessage("/list categories june"));
 			const ctx = createExecutionContext();
 			const response = await worker.fetch(request, testEnv, ctx);
 			await waitOnExecutionContext(ctx);
