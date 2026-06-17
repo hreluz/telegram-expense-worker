@@ -54,7 +54,7 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 
 ### Message format
 
-Expense messages follow `<amount> <category> [note]`. Parsed by `parseExpense` in `handlers.ts` — throws with user-facing error messages on invalid input, which are caught and forwarded to the user via Telegram. The category is lowercased before storage so `GYM` and `gym` resolve to the same `categories` row.
+Expense messages follow `<amount> <category> [@YYYY-MM-DD] [note]`. Parsed by `parseExpense` in `handlers.ts` — throws with user-facing error messages on invalid input, which are caught and forwarded to the user via Telegram. The `@date` token is optional and can appear anywhere after the category; if absent, `expenseDate` defaults to today. The category is lowercased before storage so `GYM` and `gym` resolve to the same `categories` row.
 
 ## Environment variables
 
@@ -103,6 +103,7 @@ CREATE TABLE expenses (
   amount NUMERIC(10, 2) NOT NULL,
   category_id INTEGER NOT NULL REFERENCES categories(id),
   note TEXT DEFAULT '',
+  expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

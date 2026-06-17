@@ -9,17 +9,19 @@ The worker receives POST requests from the Telegram Bot API. Each message is par
 **Log an expense** — send a message in the format:
 
 ```
-<amount> <category> [note]
+<amount> <category> [@YYYY-MM-DD] [note]
 ```
 
 Examples:
 ```
-300 gym
-45.50 groceries weekly shopping
-12 coffee
+300 gym                                      # amount + category
+45.50 groceries weekly shopping              # with note
+300 gym @2026-06-10                          # with date
+300 gym @2026-06-10 bought shoes             # with date and note
+45.50 groceries @2026-06-10 weekly shopping  # date can appear anywhere after category
 ```
 
-Categories are created automatically and stored in lowercase, so `GYM`, `Gym`, and `gym` all map to the same category.
+The `@date` token is optional and can appear anywhere after the category. If omitted, today's date is used. Categories are created automatically and stored in lowercase, so `GYM`, `Gym`, and `gym` all map to the same category.
 
 **List recent expenses** — send `/list` to get your last 10 entries.
 
@@ -60,6 +62,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   amount NUMERIC(10, 2) NOT NULL,
   category_id INTEGER NOT NULL REFERENCES categories(id),
   note TEXT DEFAULT '',
+  expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

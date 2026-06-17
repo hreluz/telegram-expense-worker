@@ -24,6 +24,17 @@ async function requireAdmin(sql: Sql, telegramUserId: number, token: string, adm
 	return null;
 }
 
+const DATE_TOKEN_RE = /^@(\d{4}-\d{2}-\d{2})$/;
+
+function isValidDate(s: string): boolean {
+	const d = new Date(s);
+	return !isNaN(d.getTime()) && d.toISOString().startsWith(s);
+}
+
+function todayIso(): string {
+	return new Date().toISOString().slice(0, 10);
+}
+
 export function parseExpense(text: string): Expense {
 	const parts = text.trim().split(/\s+/);
 
@@ -33,13 +44,29 @@ export function parseExpense(text: string): Expense {
 
 	const amount = Number(parts[0]);
 	const category = parts[1].toLowerCase();
-	const note = parts.slice(2).join(" ");
 
 	if (Number.isNaN(amount) || amount <= 0) {
 		throw new Error("Amount must be a valid number");
 	}
 
-	return { amount, category, note };
+	const trailing = parts.slice(2);
+	let expenseDate: string | undefined;
+	const noteTokens: string[] = [];
+
+	for (const token of trailing) {
+		const match = DATE_TOKEN_RE.exec(token);
+		if (match && expenseDate === undefined) {
+			const candidate = match[1];
+			if (!isValidDate(candidate)) {
+				throw new Error("Invalid date. Use @YYYY-MM-DD format");
+			}
+			expenseDate = candidate;
+		} else {
+			noteTokens.push(token);
+		}
+	}
+
+	return { amount, category, note: noteTokens.join(" "), expenseDate: expenseDate ?? todayIso() };
 }
 
 export async function handleReport(sql: Sql, telegramUserId: number, token: string): Promise<Response> {
@@ -48,7 +75,7 @@ export async function handleReport(sql: Sql, telegramUserId: number, token: stri
 
 		const header = "date,amount,category,note";
 		const csvRows = rows.map((row) =>
-			[row.created_at, row.amount, row.category, row.note ?? ""].join(",")
+			[row.expense_date, row.amount, row.category, row.note ?? ""].join(",")
 		);
 		const csv = [header, ...csvRows].join("\n");
 
@@ -136,7 +163,9 @@ export async function handleAddExpense(sql: Sql, telegramUserId: number, text: s
 	try {
 		const expense = parseExpense(text);
 		await saveExpense(sql, telegramUserId, expense);
-		await trySend(sql, token, telegramUserId, `Saved: ${expense.amount} ${expense.category}`);
+		const lines = [`Saved: ${expense.amount} ${expense.category}`, `Date: ${expense.expenseDate}`];
+		if (expense.note) lines.push(`Note: ${expense.note}`);
+		await trySend(sql, token, telegramUserId, lines.join('\n'));
 		return Response.json({ ok: true, message: "Saved", expense });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Invalid input";

@@ -40,7 +40,7 @@ describe("db", () => {
 				.mockResolvedValueOnce([{ id: 1 }])
 				.mockResolvedValueOnce([]);
 
-			const result = await saveExpense(mockSql, 42, { amount: 300, category: "gym", note: "" });
+			const result = await saveExpense(mockSql, 42, { amount: 300, category: "gym", note: "", expenseDate: "2026-06-10" });
 
 			expect(mockSql).toHaveBeenCalledTimes(2);
 			expect(result).toBeUndefined();
