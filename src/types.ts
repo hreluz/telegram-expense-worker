@@ -17,6 +17,7 @@ export type Expense = {
 	amount: number;
 	category: string;
 	note: string;
+	expenseDate: string; // ISO 8601: "YYYY-MM-DD"
 };
 
 export type Sql = NeonQueryFunction<false, false>;

@@ -167,8 +167,8 @@ describe("telegram-expense-worker", () => {
 	describe("/report", () => {
 		it("returns CSV with header and rows", async () => {
 			mockSql.mockResolvedValue([
-				{ created_at: "2026-01-01", amount: 100, category: "food", note: "lunch" },
-				{ created_at: "2026-01-02", amount: 50, category: "gym", note: null },
+				{ expense_date: "2026-01-01", amount: 100, category: "food", note: "lunch" },
+				{ expense_date: "2026-01-02", amount: 50, category: "gym", note: null },
 			]);
 
 			const request = postRequest(telegramMessage("/report"));
@@ -237,6 +237,17 @@ describe("telegram-expense-worker", () => {
 			expect(body.ok).toBe(true);
 			expect(body.message).toBe("Saved");
 			expect(body.expense).toMatchObject({ amount: 300, category: "gym", note: "" });
+		});
+
+		it("saves an expense with a @date token", async () => {
+			const request = postRequest(telegramMessage("300 gym @2026-06-10"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean; expense: { expenseDate: string } };
+			expect(body.ok).toBe(true);
+			expect(body.expense.expenseDate).toBe("2026-06-10");
 		});
 
 		it("saves expense with a multi-word note", async () => {

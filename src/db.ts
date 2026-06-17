@@ -14,6 +14,7 @@ export async function migrate(sql: Sql) {
 			amount NUMERIC(10, 2) NOT NULL,
 			category_id INTEGER NOT NULL REFERENCES categories(id),
 			note TEXT DEFAULT '',
+			expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
 			created_at TIMESTAMPTZ DEFAULT NOW()
 		)
 	`;
@@ -46,21 +47,21 @@ export async function fetchLogs(sql: Sql, telegramUserId: number) {
 
 export async function fetchReport(sql: Sql, telegramUserId: number) {
 	return sql`
-		SELECT e.created_at, e.amount, c.name AS category, e.note
+		SELECT e.expense_date, e.amount, c.name AS category, e.note
 		FROM expenses e
 		JOIN categories c ON c.id = e.category_id
 		WHERE e.telegram_user_id = ${telegramUserId}
-		ORDER BY e.created_at DESC
+		ORDER BY e.expense_date DESC, e.created_at DESC
 	`;
 }
 
 export async function fetchRecent(sql: Sql, telegramUserId: number) {
 	return sql`
-		SELECT e.amount, c.name AS category, e.note, e.created_at
+		SELECT e.amount, c.name AS category, e.note, e.expense_date, e.created_at
 		FROM expenses e
 		JOIN categories c ON c.id = e.category_id
 		WHERE e.telegram_user_id = ${telegramUserId}
-		ORDER BY e.created_at DESC
+		ORDER BY e.expense_date DESC, e.created_at DESC
 		LIMIT 10
 	`;
 }
@@ -77,7 +78,7 @@ async function upsertCategory(sql: Sql, name: string): Promise<number> {
 export async function saveExpense(sql: Sql, telegramUserId: number, expense: Expense) {
 	const categoryId = await upsertCategory(sql, expense.category);
 	await sql`
-		INSERT INTO expenses (telegram_user_id, amount, category_id, note)
-		VALUES (${telegramUserId}, ${expense.amount}, ${categoryId}, ${expense.note})
+		INSERT INTO expenses (telegram_user_id, amount, category_id, note, expense_date)
+		VALUES (${telegramUserId}, ${expense.amount}, ${categoryId}, ${expense.note}, ${expense.expenseDate})
 	`;
 }

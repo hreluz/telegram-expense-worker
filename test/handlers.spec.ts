@@ -43,11 +43,11 @@ beforeEach(() => {
 
 describe("parseExpense", () => {
 	it("parses amount and category", () => {
-		expect(parseExpense("300 gym")).toEqual({ amount: 300, category: "gym", note: "" });
+		expect(parseExpense("300 gym")).toMatchObject({ amount: 300, category: "gym", note: "" });
 	});
 
 	it("parses a multi-word note", () => {
-		expect(parseExpense("50 food pizza night out")).toEqual({
+		expect(parseExpense("50 food pizza night out")).toMatchObject({
 			amount: 50,
 			category: "food",
 			note: "pizza night out",
@@ -75,7 +75,40 @@ describe("parseExpense", () => {
 	});
 
 	it("lowercases the category", () => {
-		expect(parseExpense("300 GYM")).toEqual({ amount: 300, category: "gym", note: "" });
+		expect(parseExpense("300 GYM")).toMatchObject({ amount: 300, category: "gym", note: "" });
+	});
+
+	it("parses @date token with no note", () => {
+		expect(parseExpense("300 gym @2026-06-10")).toMatchObject({ amount: 300, category: "gym", note: "", expenseDate: "2026-06-10" });
+	});
+
+	it("parses @date token followed by a note", () => {
+		expect(parseExpense("300 gym @2026-06-10 bought shoes")).toMatchObject({ amount: 300, category: "gym", note: "bought shoes", expenseDate: "2026-06-10" });
+	});
+
+	it("parses @date token among note tokens", () => {
+		expect(parseExpense("300 gym bought @2026-06-10 shoes")).toMatchObject({ amount: 300, category: "gym", note: "bought shoes", expenseDate: "2026-06-10" });
+	});
+
+	it("defaults expenseDate to today when no @date token is given", () => {
+		const result = parseExpense("300 gym");
+		expect(result.expenseDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+	});
+
+	it("treats @-prefixed non-date tokens as note words", () => {
+		expect(parseExpense("300 gym @home")).toMatchObject({ note: "@home" });
+	});
+
+	it("throws for a calendar-invalid date", () => {
+		expect(() => parseExpense("300 gym @2026-02-30")).toThrow("Invalid date. Use @YYYY-MM-DD format");
+	});
+
+	it("treats wrong date separator as a note token", () => {
+		expect(parseExpense("300 gym @2026/06/10")).toMatchObject({ note: "@2026/06/10" });
+	});
+
+	it("first @date token wins, second becomes part of the note", () => {
+		expect(parseExpense("300 gym @2026-06-10 @2026-06-11")).toMatchObject({ expenseDate: "2026-06-10", note: "@2026-06-11" });
 	});
 });
 
@@ -90,8 +123,8 @@ describe("handleReport", () => {
 
 	it("builds CSV rows from expenses", async () => {
 		mockFetchReport.mockResolvedValue([
-			{ created_at: "2026-01-01", amount: 100, category: "food", note: "lunch" },
-			{ created_at: "2026-01-02", amount: 50, category: "gym", note: null },
+			{ expense_date: "2026-01-01", amount: 100, category: "food", note: "lunch" },
+			{ expense_date: "2026-01-02", amount: 50, category: "gym", note: null },
 		]);
 
 		const response = await handleReport(sql, 42, token);
@@ -268,13 +301,19 @@ describe("handleAddExpense", () => {
 		expect(body.ok).toBe(true);
 		expect(body.message).toBe("Saved");
 		expect(body.expense).toMatchObject({ amount: 300, category: "gym", note: "" });
-		expect(mockSaveExpense).toHaveBeenCalledWith(sql, 42, { amount: 300, category: "gym", note: "" });
+		expect(mockSaveExpense).toHaveBeenCalledWith(sql, 42, expect.objectContaining({ amount: 300, category: "gym", note: "" }));
 	});
 
 	it("sends a confirmation to the user via Telegram", async () => {
 		await handleAddExpense(sql, 42, "300 gym", token);
 
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Saved: 300 gym");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, expect.stringMatching(/^Saved: 300 gym\nDate: \d{4}-\d{2}-\d{2}$/));
+	});
+
+	it("includes note in confirmation when present", async () => {
+		await handleAddExpense(sql, 42, "300 gym bought shoes", token);
+
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, expect.stringMatching(/^Saved: 300 gym\nDate: \d{4}-\d{2}-\d{2}\nNote: bought shoes$/));
 	});
 
 	it("returns 400 and logs when parsing fails", async () => {
