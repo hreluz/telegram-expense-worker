@@ -104,7 +104,9 @@ vi.mock("../src/db", () => ({ fetchReport: mockFn }));
 ```sql
 CREATE TABLE categories (
   id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE
+  telegram_user_id BIGINT NOT NULL,
+  name TEXT NOT NULL,
+  UNIQUE (telegram_user_id, name)
 );
 
 CREATE TABLE expenses (

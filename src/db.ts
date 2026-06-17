@@ -4,7 +4,9 @@ export async function migrate(sql: Sql) {
 	await sql`
 		CREATE TABLE IF NOT EXISTS categories (
 			id SERIAL PRIMARY KEY,
-			name TEXT NOT NULL UNIQUE
+			telegram_user_id BIGINT NOT NULL,
+			name TEXT NOT NULL,
+			UNIQUE (telegram_user_id, name)
 		)
 	`;
 	await sql`
@@ -88,17 +90,17 @@ export async function fetchRecent(sql: Sql, telegramUserId: number, filter?: str
 	`;
 }
 
-async function upsertCategory(sql: Sql, name: string): Promise<number> {
+async function upsertCategory(sql: Sql, telegramUserId: number, name: string): Promise<number> {
 	const rows = await sql`
-		INSERT INTO categories (name) VALUES (${name})
-		ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+		INSERT INTO categories (telegram_user_id, name) VALUES (${telegramUserId}, ${name})
+		ON CONFLICT (telegram_user_id, name) DO UPDATE SET name = EXCLUDED.name
 		RETURNING id
 	`;
 	return rows[0].id as number;
 }
 
 export async function saveExpense(sql: Sql, telegramUserId: number, expense: Expense) {
-	const categoryId = await upsertCategory(sql, expense.category);
+	const categoryId = await upsertCategory(sql, telegramUserId, expense.category);
 	await sql`
 		INSERT INTO expenses (telegram_user_id, amount, category_id, note, expense_date)
 		VALUES (${telegramUserId}, ${expense.amount}, ${categoryId}, ${expense.note}, ${expense.expenseDate})

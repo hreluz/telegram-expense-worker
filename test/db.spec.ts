@@ -81,6 +81,31 @@ describe("db", () => {
 			expect(mockSql).toHaveBeenCalledTimes(2);
 			expect(result).toBeUndefined();
 		});
+
+		it("scopes category upsert to the user's telegram_user_id", async () => {
+			(mockSql as ReturnType<typeof vi.fn>)
+				.mockResolvedValueOnce([{ id: 1 }])
+				.mockResolvedValueOnce([]);
+
+			await saveExpense(mockSql, 42, { amount: 300, category: "gym", note: "", expenseDate: "2026-06-10" });
+
+			// First call is the category upsert; interpolated values are (telegramUserId, name)
+			const [, telegramUserId, categoryName] = (mockSql as ReturnType<typeof vi.fn>).mock.calls[0];
+			expect(telegramUserId).toBe(42);
+			expect(categoryName).toBe("gym");
+		});
+
+		it("uses ON CONFLICT (telegram_user_id, name) to prevent duplicate categories per user", async () => {
+			(mockSql as ReturnType<typeof vi.fn>)
+				.mockResolvedValueOnce([{ id: 1 }])
+				.mockResolvedValueOnce([]);
+
+			await saveExpense(mockSql, 42, { amount: 300, category: "gym", note: "", expenseDate: "2026-06-10" });
+
+			// First call is the category upsert; string parts joined reveal the ON CONFLICT clause
+			const sqlStrings = (mockSql as ReturnType<typeof vi.fn>).mock.calls[0][0] as string[];
+			expect(sqlStrings.join("")).toContain("ON CONFLICT (telegram_user_id, name)");
+		});
 	});
 
 	describe("migrate", () => {
