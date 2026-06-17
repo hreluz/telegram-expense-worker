@@ -2,10 +2,11 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import worker from "../src/index";
 
-const { mockSql, mockSendTelegramMessage, mockDropPendingUpdates } = vi.hoisted(() => ({
+const { mockSql, mockSendTelegramMessage, mockDropPendingUpdates, mockSetTelegramCommands } = vi.hoisted(() => ({
 	mockSql: vi.fn().mockResolvedValue([]),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
 	mockDropPendingUpdates: vi.fn().mockResolvedValue(undefined),
+	mockSetTelegramCommands: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@neondatabase/serverless", () => ({
@@ -15,6 +16,7 @@ vi.mock("@neondatabase/serverless", () => ({
 vi.mock("../src/telegram", () => ({
 	sendTelegramMessage: mockSendTelegramMessage,
 	dropPendingUpdates: mockDropPendingUpdates,
+	setTelegramCommands: mockSetTelegramCommands,
 }));
 
 const testEnv = { DATABASE_URL: "postgresql://test", TELEGRAM_TOKEN: "test-token" };
@@ -34,8 +36,10 @@ function telegramMessage(text: string, userId = 42) {
 
 describe("telegram-expense-worker", () => {
 	beforeEach(() => {
+		vi.clearAllMocks();
 		mockSql.mockResolvedValue([]);
 		mockSendTelegramMessage.mockResolvedValue(undefined);
+		mockSetTelegramCommands.mockResolvedValue(undefined);
 	});
 
 	it("returns running message on non-POST request", async () => {
@@ -57,7 +61,7 @@ describe("telegram-expense-worker", () => {
 	});
 
 	describe("/start", () => {
-		it("returns ok without sending a Telegram message", async () => {
+		it("sends the help message to the user", async () => {
 			const request = postRequest(telegramMessage("/start"));
 			const ctx = createExecutionContext();
 			const response = await worker.fetch(request, testEnv, ctx);
@@ -66,7 +70,21 @@ describe("telegram-expense-worker", () => {
 			expect(response.status).toBe(200);
 			const body = await response.json() as { ok: boolean };
 			expect(body.ok).toBe(true);
-			expect(mockSendTelegramMessage).not.toHaveBeenCalled();
+			expect(mockSendTelegramMessage).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("/help", () => {
+		it("sends the help message to the user", async () => {
+			const request = postRequest(telegramMessage("/help"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(200);
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+			expect(mockSendTelegramMessage).toHaveBeenCalledOnce();
 		});
 	});
 

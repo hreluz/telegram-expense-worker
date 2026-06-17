@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseExpense, handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending } from "../src/handlers";
+import { parseExpense, handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, HELP_TEXT } from "../src/handlers";
 import type { Sql } from "../src/types";
 
-const { mockFetchReport, mockFetchRecent, mockSaveExpense, mockMigrate, mockSaveLog, mockFetchLogs, mockSendTelegramMessage, mockDropPendingUpdates } = vi.hoisted(() => ({
+const { mockFetchReport, mockFetchRecent, mockSaveExpense, mockMigrate, mockSaveLog, mockFetchLogs, mockSendTelegramMessage, mockDropPendingUpdates, mockSetTelegramCommands } = vi.hoisted(() => ({
 	mockFetchReport: vi.fn().mockResolvedValue([]),
 	mockFetchRecent: vi.fn().mockResolvedValue([]),
 	mockSaveExpense: vi.fn().mockResolvedValue(undefined),
@@ -11,6 +11,7 @@ const { mockFetchReport, mockFetchRecent, mockSaveExpense, mockMigrate, mockSave
 	mockFetchLogs: vi.fn().mockResolvedValue([]),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
 	mockDropPendingUpdates: vi.fn().mockResolvedValue(undefined),
+	mockSetTelegramCommands: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/db", () => ({
@@ -25,6 +26,7 @@ vi.mock("../src/db", () => ({
 vi.mock("../src/telegram", () => ({
 	sendTelegramMessage: mockSendTelegramMessage,
 	dropPendingUpdates: mockDropPendingUpdates,
+	setTelegramCommands: mockSetTelegramCommands,
 }));
 
 const sql = {} as unknown as Sql;
@@ -39,6 +41,7 @@ beforeEach(() => {
 	mockFetchLogs.mockResolvedValue([]);
 	mockSendTelegramMessage.mockResolvedValue(undefined);
 	mockDropPendingUpdates.mockResolvedValue(undefined);
+	mockSetTelegramCommands.mockResolvedValue(undefined);
 });
 
 describe("parseExpense", () => {
@@ -109,6 +112,21 @@ describe("parseExpense", () => {
 
 	it("first @date token wins, second becomes part of the note", () => {
 		expect(parseExpense("300 gym @2026-06-10 @2026-06-11")).toMatchObject({ expenseDate: "2026-06-10", note: "@2026-06-11" });
+	});
+});
+
+describe("handleHelp", () => {
+	it("sends HELP_TEXT to the user", async () => {
+		await handleHelp(sql, 42, token);
+
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, HELP_TEXT);
+	});
+
+	it("returns ok", async () => {
+		const response = await handleHelp(sql, 42, token);
+		const body = await response.json() as { ok: boolean };
+
+		expect(body.ok).toBe(true);
 	});
 });
 
@@ -214,12 +232,13 @@ describe("handleMigrate", () => {
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Unauthorized.");
 	});
 
-	it("runs migration and replies when user is in the allowed list", async () => {
+	it("runs migration, sets commands, and replies when user is in the allowed list", async () => {
 		const response = await handleMigrate(sql, 42, token, "42,99");
 		const body = await response.json() as { ok: boolean };
 
 		expect(body.ok).toBe(true);
 		expect(mockMigrate).toHaveBeenCalledWith(sql);
+		expect(mockSetTelegramCommands).toHaveBeenCalledWith(token);
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Migration complete.");
 	});
 

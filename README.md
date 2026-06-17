@@ -27,6 +27,8 @@ The `@date` token is optional and can appear anywhere after the category. If omi
 
 **Export all expenses** — send `/report` to receive a CSV of your full history.
 
+**Show help** — send `/help` (or `/start`) to see the expense format, examples, and available commands.
+
 **Initialize the database** — send `/migrate` to create the tables (admin only).
 
 **Drop pending Telegram updates** — send `/droppending` to flush Telegram's webhook retry queue (admin only).
