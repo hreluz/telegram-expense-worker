@@ -14,11 +14,11 @@ The worker receives POST requests from the Telegram Bot API. Each message is par
 
 Examples:
 ```
-300 gym
-45.50 groceries weekly shopping
-12 coffee
-300 gym @2026-06-10
-300 gym @2026-06-10 bought shoes
+300 gym                                      # amount + category
+45.50 groceries weekly shopping              # with note
+300 gym @2026-06-10                          # with date
+300 gym @2026-06-10 bought shoes             # with date and note
+45.50 groceries @2026-06-10 weekly shopping  # date can appear anywhere after category
 ```
 
 The `@date` token is optional and can appear anywhere after the category. If omitted, today's date is used. Categories are created automatically and stored in lowercase, so `GYM`, `Gym`, and `gym` all map to the same category.
