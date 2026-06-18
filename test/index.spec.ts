@@ -492,6 +492,44 @@ describe("telegram-expense-worker", () => {
 		});
 	});
 
+	describe("/note", () => {
+		it("updates the note and returns ok", async () => {
+			mockSql.mockResolvedValue([{ id: 10 }]);
+
+			const request = postRequest(telegramMessage("/note 10 bought new shoes"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+			expect(mockSendTelegramMessage).toHaveBeenCalledWith("test-token", 42, "Note updated for expense #10: bought new shoes");
+		});
+
+		it("returns ok: false when expense is not found", async () => {
+			mockSql.mockResolvedValue([]);
+
+			const request = postRequest(telegramMessage("/note 99 some note"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(false);
+			expect(mockSendTelegramMessage).toHaveBeenCalledWith("test-token", 42, "Expense #99 not found.");
+		});
+
+		it("returns ok: false when no args given", async () => {
+			const request = postRequest(telegramMessage("/note"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(false);
+		});
+	});
+
 	describe("/top", () => {
 		it("returns rows when expenses exist", async () => {
 			mockSql.mockResolvedValue([

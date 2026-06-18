@@ -24,6 +24,7 @@ Format: <code>&lt;amount&gt; &lt;category&gt; [@YYYY-MM-DD] [note]</code>
 🗂 <b>Manage</b>
 <code>/undo</code> — delete last expense
 <code>/delete &lt;id&gt;</code> — delete by ID
+<code>/note &lt;id&gt; &lt;text&gt;</code> — update the note on an expense
 <code>/rename coffee cafe</code> — merge a category into another
 
 💰 <b>Budgets</b>

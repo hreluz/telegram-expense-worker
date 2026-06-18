@@ -1,5 +1,5 @@
 import type { Sql, TelegramBody } from './types';
-import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, saveLog, deleteExpense, fetchBiggestExpense, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses, renameCategory, fetchTopExpenses, fetchPeriodSummary, categoryExists } from './db';
+import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, saveLog, deleteExpense, fetchBiggestExpense, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses, renameCategory, fetchTopExpenses, fetchPeriodSummary, categoryExists, updateExpenseNote } from './db';
 import { sendTelegramMessage, sendTelegramDocument, answerCallbackQuery, editMessageReplyMarkup } from './telegram';
 import { HELP_TEXT, trySend, validateFilter, parseExpense, todayIso, prevMonth } from './handlers/utils';
 
@@ -335,6 +335,40 @@ export async function handleTop(sql: Sql, telegramUserId: number, token: string,
 		}
 		await trySend(sql, token, telegramUserId, text);
 		return Response.json({ ok: true, rows });
+	} catch (error) {
+		const message = error instanceof Error ? error.message : 'Unknown error';
+		await saveLog(sql, telegramUserId, message);
+		await trySend(sql, token, telegramUserId, message);
+		return Response.json({ ok: false, error: message });
+	}
+}
+
+export async function handleNote(sql: Sql, telegramUserId: number, token: string, args: string): Promise<Response> {
+	const parts = args.trim().split(/\s+/);
+	const idStr = parts[0];
+
+	if (!idStr) {
+		await trySend(sql, token, telegramUserId, 'Use: /note <id> [text]');
+		return Response.json({ ok: false, error: 'Invalid usage' });
+	}
+
+	const id = Number(idStr);
+	if (!Number.isInteger(id) || id <= 0) {
+		await trySend(sql, token, telegramUserId, 'Invalid ID. Use: /note <id> [text]');
+		return Response.json({ ok: false, error: 'Invalid ID' });
+	}
+
+	const note = parts.slice(1).join(' ');
+
+	try {
+		const found = await updateExpenseNote(sql, telegramUserId, id, note);
+		if (!found) {
+			await trySend(sql, token, telegramUserId, `Expense #${id} not found.`);
+			return Response.json({ ok: false, error: 'Expense not found' });
+		}
+		const msg = note ? `Note updated for expense #${id}: ${note}` : `Note cleared for expense #${id}.`;
+		await trySend(sql, token, telegramUserId, msg);
+		return Response.json({ ok: true });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';
 		await saveLog(sql, telegramUserId, message);

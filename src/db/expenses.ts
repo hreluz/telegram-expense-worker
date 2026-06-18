@@ -131,6 +131,16 @@ export async function searchExpenses(sql: Sql, telegramUserId: number, keyword: 
 	`;
 }
 
+export async function updateExpenseNote(sql: Sql, telegramUserId: number, id: number, note: string): Promise<boolean> {
+	const rows = await sql`
+		UPDATE expenses
+		SET note = ${note}
+		WHERE id = ${id} AND telegram_user_id = ${telegramUserId}
+		RETURNING id
+	`;
+	return rows.length > 0;
+}
+
 export async function deleteExpense(sql: Sql, telegramUserId: number, id: number): Promise<{ found: boolean; categoryDeleted: boolean }> {
 	const deleted = await sql`
 		DELETE FROM expenses

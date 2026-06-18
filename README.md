@@ -115,6 +115,13 @@ When you save an expense that tips a category over its budget, a warning is adde
 /delete 42
 ```
 
+**Update a note** — send `/note <id> <text>` to set or replace the note on an existing expense. Omit the text to clear it. The ID is shown in `/list`.
+
+```
+/note 42 bought new shoes    # set the note on expense #42
+/note 42                     # clear the note on expense #42
+```
+
 **Rename a category** — send `/rename <old> <new>` to merge all expenses from one category into another. The old category is deleted automatically. Both names are case-insensitive. Works whether the new category already exists or not.
 
 ```
