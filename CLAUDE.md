@@ -36,11 +36,16 @@ This is a Cloudflare Worker acting as a Telegram bot webhook. Telegram POSTs upd
 ### Layer structure
 
 ```
-src/types.ts     — shared types: Env, TelegramBody, Expense, Sql
-src/db.ts        — data access: fetchReport, fetchRecent, fetchCategoryTotals, saveExpense (all SQL lives here)
-src/telegram.ts  — outbound API: sendTelegramMessage, dropPendingUpdates, setTelegramCommands
-src/handlers.ts  — command logic: parseExpense + one handler per command
-src/index.ts     — worker entry point: parse body, guard, dispatch to handler
+src/types.ts              — shared types: Env, TelegramBody, Expense, Sql
+src/db.ts                 — barrel re-export of src/db/*
+src/db/expenses.ts        — fetchReport, fetchRecent, saveExpense, deleteExpense, deleteLatestExpense, fetchBiggestExpense
+src/db/categories.ts      — fetchCategoryTotals
+src/db/logs.ts            — migrate, saveLog, fetchLogs
+src/telegram.ts           — outbound API: sendTelegramMessage, dropPendingUpdates, setTelegramCommands
+src/handlers/utils.ts     — shared helpers: trySend, validateFilter, parseExpense, HELP_TEXT, date utilities
+src/handlers/admin.ts     — handleMigrate, handleLogs, handleDropPending (imports from utils)
+src/handlers.ts           — expense handlers + barrel re-export of handlers/utils and handlers/admin
+src/index.ts              — worker entry point: parse body, guard, dispatch to handler
 ```
 
 Each layer only imports from layers below it. `index.ts` knows about handlers; handlers know about `db` and `telegram`; neither knows about each other.
@@ -59,15 +64,15 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 
 ### Adding a new command
 
-1. Add a query function in `src/db.ts`
-2. Add a handler in `src/handlers.ts` (call db, call `sendTelegramMessage`, return `Response.json`)
+1. Add a query function in the appropriate `src/db/*.ts` file (expenses, categories, or logs)
+2. Add the handler in `src/handlers.ts` (expense commands) or `src/handlers/admin.ts` (admin commands)
 3. Add one `if (text === "/command")` line in `src/index.ts`
-4. If user-facing, add it to `HELP_TEXT` in `src/handlers.ts` and the `commands` array in `setTelegramCommands` in `src/telegram.ts`
-5. Add tests in the corresponding spec files
+4. If user-facing, add it to `HELP_TEXT` in `src/handlers/utils.ts` and the `commands` array in `setTelegramCommands` in `src/telegram.ts`
+5. Add tests in the corresponding spec files (`test/handlers.spec.ts`, `test/handlers/admin.spec.ts`, or `test/handlers/utils.spec.ts`)
 
 ### Message format
 
-Expense messages follow `<amount> <category> [@YYYY-MM-DD] [note]`. Parsed by `parseExpense` in `handlers.ts` — throws with user-facing error messages on invalid input, which are caught and forwarded to the user via Telegram. The `@date` token is optional and can appear anywhere after the category; if absent, `expenseDate` defaults to today. The category is lowercased before storage so `GYM` and `gym` resolve to the same `categories` row.
+Expense messages follow `<amount> <category> [@YYYY-MM-DD] [note]`. Parsed by `parseExpense` in `src/handlers/utils.ts` — throws with user-facing error messages on invalid input, which are caught and forwarded to the user via Telegram. The `@date` token is optional and can appear anywhere after the category; if absent, `expenseDate` defaults to today. The category is lowercased before storage so `GYM` and `gym` resolve to the same `categories` row.
 
 ## Environment variables
 
@@ -98,7 +103,9 @@ vi.mock("../src/db", () => ({ fetchReport: mockFn }));
 
 **Test structure per layer:**
 - `test/db.spec.ts` — passes a mock sql function directly; verifies each function calls sql and returns its result
-- `test/handlers.spec.ts` — mocks `../src/db` and `../src/telegram`; tests response shape and Telegram message content
+- `test/handlers/utils.spec.ts` — tests `parseExpense` (pure function, no mocks needed)
+- `test/handlers/admin.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests admin handlers
+- `test/handlers.spec.ts` — mocks `../src/db` and `../src/telegram`; tests expense handler response shape and Telegram message content
 - `test/index.spec.ts` — mocks `@neondatabase/serverless` and `../src/telegram`; tests routing and HTTP-level behaviour
 - `test/telegram.spec.ts` — stubs global `fetch`; verifies URL and request body
 
