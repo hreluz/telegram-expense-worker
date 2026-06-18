@@ -42,6 +42,17 @@ ID    Date        Amount    Category      Note
 #40   2026-06-10  12.00     coffee
 ```
 
+**Top expenses by amount** — send `/top` to see your biggest expenses ranked by amount. Optionally limit the count or filter by date:
+
+```
+/top                   # top 10 expenses, all time
+/top 5                 # top 5 expenses, all time
+/top 2026-05           # top 10 in May 2026
+/top 5 2026-05         # top 5 in May 2026
+```
+
+Output uses the same table format as `/list`.
+
 **Search expenses** — send `/search <keyword>` to find expenses where the category name or note contains the keyword. The search is case-insensitive and returns all matching entries across all time, formatted the same way as `/list`.
 
 ```
@@ -138,6 +149,14 @@ CREATE TABLE IF NOT EXISTS logs (
   telegram_user_id BIGINT,
   message TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS budgets (
+  id SERIAL PRIMARY KEY,
+  telegram_user_id BIGINT NOT NULL,
+  category TEXT NOT NULL,
+  amount NUMERIC(10, 2) NOT NULL,
+  UNIQUE (telegram_user_id, category)
 );
 ```
 

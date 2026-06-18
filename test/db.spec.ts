@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses, renameCategory } from "../src/db";
+import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense, fetchTopExpenses, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses, renameCategory } from "../src/db";
 import type { Sql } from "../src/types";
 
 describe("db", () => {
@@ -134,6 +134,36 @@ describe("db", () => {
 
 			expect(result).toEqual(rows);
 			expect(mockSql).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("fetchTopExpenses", () => {
+		it("returns rows ordered by amount with no filter", async () => {
+			const rows = [
+				{ id: 1, amount: 300, category: "gym", note: "", expense_date: "2026-06-10" },
+				{ id: 2, amount: 100, category: "food", note: "", expense_date: "2026-06-01" },
+			];
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue(rows);
+
+			const result = await fetchTopExpenses(mockSql, 42, 10);
+
+			expect(result).toEqual(rows);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("calls sql with filter pattern when filter is provided", async () => {
+			await fetchTopExpenses(mockSql, 42, 5, "2026-05");
+
+			expect(mockSql).toHaveBeenCalledOnce();
+			const [, , pattern] = (mockSql as ReturnType<typeof vi.fn>).mock.calls[0];
+			expect(pattern).toBe("2026-05%");
+		});
+
+		it("passes limit to sql", async () => {
+			await fetchTopExpenses(mockSql, 42, 3);
+
+			const sqlStrings = (mockSql as ReturnType<typeof vi.fn>).mock.calls[0][0] as string[];
+			expect(sqlStrings.join("")).toContain("LIMIT");
 		});
 	});
 

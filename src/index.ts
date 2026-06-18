@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import type { Env, TelegramBody } from "./types";
-import { handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, handleSearch, handleCallbackQuery, handleRename } from "./handlers";
+import { handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, handleSearch, handleCallbackQuery, handleRename, handleTop } from "./handlers";
 
 function parseViewAndFilter(args: string): { view: 'expenses' | 'categories'; filter: string | undefined } {
 	const [first, ...rest] = args.split(/\s+/);
@@ -47,6 +47,9 @@ export default {
 			const args = text.slice(5).trim();
 			const { view, filter } = parseViewAndFilter(args);
 			return handleList(sql, telegramUserId, env.TELEGRAM_TOKEN, view, filter);
+		}
+		if (text.startsWith("/top")) {
+			return handleTop(sql, telegramUserId, env.TELEGRAM_TOKEN, text.slice(4).trim());
 		}
 		if (text.startsWith("/rename")) {
 			return handleRename(sql, telegramUserId, env.TELEGRAM_TOKEN, text.slice(7).trim());
