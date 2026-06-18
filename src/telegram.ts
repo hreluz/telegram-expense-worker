@@ -15,6 +15,7 @@ export async function setTelegramCommands(token: string) {
 		{ command: 'list', description: 'Last 10 expenses (or /list 2026-05 to filter)' },
 		{ command: 'report', description: 'Export expenses as CSV (or /report 2026-05 to filter)' },
 		{ command: 'delete', description: 'Delete an expense by ID' },
+		{ command: 'undo', description: 'Delete the most recently added expense' },
 		{ command: 'summary', description: 'Spending snapshot for the current month' },
 		{ command: 'help', description: 'Show commands and examples' },
 	];

@@ -354,6 +354,37 @@ describe("telegram-expense-worker", () => {
 		});
 	});
 
+	describe("/undo", () => {
+		it("returns ok when there are no expenses", async () => {
+			mockSql.mockResolvedValue([]);
+
+			const request = postRequest(telegramMessage("/undo"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+			expect(mockSendTelegramMessage).toHaveBeenCalledWith("test-token", 42, "No expenses to undo.");
+		});
+
+		it("deletes latest expense and returns ok", async () => {
+			mockSql
+				.mockResolvedValueOnce([{ id: 3, amount: 300, category_id: 5, expense_date: "2026-06-17" }])
+				.mockResolvedValueOnce([{ name: "gym" }])
+				.mockResolvedValueOnce([{ count: 1 }]);
+
+			const request = postRequest(telegramMessage("/undo"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+			expect(mockSendTelegramMessage).toHaveBeenCalledWith("test-token", 42, "Undone: 300.00 gym (2026-06-17).");
+		});
+	});
+
 	describe("/delete", () => {
 		it("deletes an expense and returns ok", async () => {
 			mockSql

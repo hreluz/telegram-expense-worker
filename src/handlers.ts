@@ -1,5 +1,5 @@
 import type { Sql, Expense } from "./types";
-import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense } from "./db";
+import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense, deleteLatestExpense } from "./db";
 import { sendTelegramMessage, sendTelegramDocument, dropPendingUpdates, setTelegramCommands } from "./telegram";
 
 export const HELP_TEXT = `Expense Tracker Bot
@@ -21,6 +21,7 @@ Commands:
   /report 2026-05              — filtered CSV for a period
   /report categories           — category totals as CSV
   /report categories 2026-05   — category totals CSV for a period
+  /undo                        — delete the most recently added expense
   /delete <id>                 — delete an expense by ID
   /summary                     — spending snapshot for the current month
   /help                        — show this message
@@ -262,6 +263,24 @@ export async function handleDelete(sql: Sql, telegramUserId: number, token: stri
 			return Response.json({ ok: false, error: 'Expense not found' });
 		}
 		await trySend(sql, token, telegramUserId, `Deleted expense #${id}.`);
+		return Response.json({ ok: true });
+	} catch (error) {
+		const message = error instanceof Error ? error.message : 'Unknown error';
+		await saveLog(sql, telegramUserId, message);
+		await trySend(sql, token, telegramUserId, 'Something went wrong.');
+		return Response.json({ ok: false, error: message }, { status: 500 });
+	}
+}
+
+export async function handleUndo(sql: Sql, telegramUserId: number, token: string): Promise<Response> {
+	try {
+		const result = await deleteLatestExpense(sql, telegramUserId);
+		if (!result.found || !result.expense) {
+			await trySend(sql, token, telegramUserId, 'No expenses to undo.');
+			return Response.json({ ok: true });
+		}
+		const { amount, category, expense_date } = result.expense;
+		await trySend(sql, token, telegramUserId, `Undone: ${Number(amount).toFixed(2)} ${category} (${expense_date}).`);
 		return Response.json({ ok: true });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';

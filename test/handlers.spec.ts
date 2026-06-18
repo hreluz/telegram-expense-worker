@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseExpense, handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, handleDelete, handleSummary, HELP_TEXT } from "../src/handlers";
+import { parseExpense, handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, handleDelete, handleSummary, handleUndo, HELP_TEXT } from "../src/handlers";
 import type { Sql } from "../src/types";
 
-const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockMigrate, mockSaveLog, mockFetchLogs, mockDeleteExpense, mockFetchBiggestExpense, mockSendTelegramMessage, mockSendTelegramDocument, mockDropPendingUpdates, mockSetTelegramCommands } = vi.hoisted(() => ({
+const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockMigrate, mockSaveLog, mockFetchLogs, mockDeleteExpense, mockFetchBiggestExpense, mockDeleteLatestExpense, mockSendTelegramMessage, mockSendTelegramDocument, mockDropPendingUpdates, mockSetTelegramCommands } = vi.hoisted(() => ({
 	mockFetchReport: vi.fn().mockResolvedValue([]),
 	mockFetchRecent: vi.fn().mockResolvedValue([]),
 	mockFetchCategoryTotals: vi.fn().mockResolvedValue([]),
@@ -12,6 +12,7 @@ const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpen
 	mockFetchLogs: vi.fn().mockResolvedValue([]),
 	mockDeleteExpense: vi.fn().mockResolvedValue({ found: true, categoryDeleted: false }),
 	mockFetchBiggestExpense: vi.fn().mockResolvedValue([]),
+	mockDeleteLatestExpense: vi.fn().mockResolvedValue({ found: true, categoryDeleted: false, expense: { id: 1, amount: 300, category: 'gym', expense_date: '2026-06-17' } }),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
 	mockSendTelegramDocument: vi.fn().mockResolvedValue(undefined),
 	mockDropPendingUpdates: vi.fn().mockResolvedValue(undefined),
@@ -28,6 +29,7 @@ vi.mock("../src/db", () => ({
 	fetchLogs: mockFetchLogs,
 	deleteExpense: mockDeleteExpense,
 	fetchBiggestExpense: mockFetchBiggestExpense,
+	deleteLatestExpense: mockDeleteLatestExpense,
 }));
 
 vi.mock("../src/telegram", () => ({
@@ -51,6 +53,7 @@ beforeEach(() => {
 	mockFetchLogs.mockResolvedValue([]);
 	mockDeleteExpense.mockResolvedValue({ found: true, categoryDeleted: false });
 	mockFetchBiggestExpense.mockResolvedValue([]);
+	mockDeleteLatestExpense.mockResolvedValue({ found: true, categoryDeleted: false, expense: { id: 1, amount: 300, category: 'gym', expense_date: '2026-06-17' } });
 	mockSendTelegramMessage.mockResolvedValue(undefined);
 	mockSendTelegramDocument.mockResolvedValue(undefined);
 	mockDropPendingUpdates.mockResolvedValue(undefined);
@@ -679,6 +682,39 @@ describe("handleSummary", () => {
 
 		expect(response.status).toBe(500);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB down");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+	});
+});
+
+describe("handleUndo", () => {
+	it("deletes the latest expense and sends confirmation", async () => {
+		mockDeleteLatestExpense.mockResolvedValue({ found: true, categoryDeleted: false, expense: { id: 5, amount: 300, category: 'gym', expense_date: '2026-06-17' } });
+
+		const response = await handleUndo(sql, 42, token);
+		const body = await response.json() as { ok: boolean };
+
+		expect(body.ok).toBe(true);
+		expect(mockDeleteLatestExpense).toHaveBeenCalledWith(sql, 42);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Undone: 300.00 gym (2026-06-17).");
+	});
+
+	it("sends 'No expenses to undo.' when there are no expenses", async () => {
+		mockDeleteLatestExpense.mockResolvedValue({ found: false, categoryDeleted: false });
+
+		const response = await handleUndo(sql, 42, token);
+		const body = await response.json() as { ok: boolean };
+
+		expect(body.ok).toBe(true);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "No expenses to undo.");
+	});
+
+	it("logs error and sends generic message when deleteLatestExpense throws", async () => {
+		mockDeleteLatestExpense.mockRejectedValue(new Error("DB error"));
+
+		const response = await handleUndo(sql, 42, token);
+
+		expect(response.status).toBe(500);
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
 	});
 });

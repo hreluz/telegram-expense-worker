@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import type { Env, TelegramBody } from "./types";
-import { handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, handleDelete, handleSummary } from "./handlers";
+import { handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, handleDelete, handleSummary, handleUndo } from "./handlers";
 
 function parseViewAndFilter(args: string): { view: 'expenses' | 'categories'; filter: string | undefined } {
 	const [first, ...rest] = args.split(/\s+/);
@@ -26,6 +26,7 @@ export default {
 		}
 
 		if (text === "/summary") return handleSummary(sql, telegramUserId, env.TELEGRAM_TOKEN);
+		if (text === "/undo") return handleUndo(sql, telegramUserId, env.TELEGRAM_TOKEN);
 		if (text === "/start") return handleHelp(sql, telegramUserId, env.TELEGRAM_TOKEN);
 		if (text === "/help") return handleHelp(sql, telegramUserId, env.TELEGRAM_TOKEN);
 		if (text === "/migrate") return handleMigrate(sql, telegramUserId, env.TELEGRAM_TOKEN, env.ADMIN_IDS);

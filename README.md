@@ -55,7 +55,9 @@ ID    Date        Amount    Category      Note
 
 **Get a spending summary** — send `/summary` to see a snapshot of the current month: total spent, comparison to last month, top 3 categories, and the single biggest expense.
 
-**Delete an expense** — send `/delete <id>` to remove an entry by its ID (shown in `/list`). If the deleted expense was the last one in its category, the category is removed automatically.
+**Undo the last expense** — send `/undo` to delete the most recently added expense without looking up its ID. If it was the last expense in its category, the category is removed automatically.
+
+**Delete an expense** — send `/delete <id>` to remove a specific entry by its ID (shown in `/list`). Same orphan-category cleanup as `/undo`.
 
 ```
 /delete 42

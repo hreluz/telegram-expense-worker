@@ -143,6 +143,40 @@ export async function fetchBiggestExpense(sql: Sql, telegramUserId: number, filt
 	`;
 }
 
+export async function deleteLatestExpense(sql: Sql, telegramUserId: number): Promise<{
+	found: boolean;
+	categoryDeleted: boolean;
+	expense?: { id: number; amount: number; category: string; expense_date: string };
+}> {
+	const deleted = await sql`
+		DELETE FROM expenses
+		WHERE id = (
+			SELECT id FROM expenses
+			WHERE telegram_user_id = ${telegramUserId}
+			ORDER BY created_at DESC
+			LIMIT 1
+		)
+		RETURNING id, amount, category_id, expense_date::text AS expense_date
+	`;
+
+	if (deleted.length === 0) {
+		return { found: false, categoryDeleted: false };
+	}
+
+	const { id, amount, category_id: categoryId, expense_date } = deleted[0] as { id: number; amount: number; category_id: number; expense_date: string };
+
+	const catRows = await sql`SELECT name FROM categories WHERE id = ${categoryId}`;
+	const category = catRows[0].name as string;
+
+	const remaining = await sql`SELECT COUNT(*)::int AS count FROM expenses WHERE category_id = ${categoryId}`;
+	if ((remaining[0].count as number) === 0) {
+		await sql`DELETE FROM categories WHERE id = ${categoryId}`;
+		return { found: true, categoryDeleted: true, expense: { id, amount, category, expense_date } };
+	}
+
+	return { found: true, categoryDeleted: false, expense: { id, amount, category, expense_date } };
+}
+
 export async function deleteExpense(sql: Sql, telegramUserId: number, id: number): Promise<{ found: boolean; categoryDeleted: boolean }> {
 	const deleted = await sql`
 		DELETE FROM expenses

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense } from "../src/db";
+import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense, deleteLatestExpense } from "../src/db";
 import type { Sql } from "../src/types";
 
 describe("db", () => {
@@ -153,6 +153,42 @@ describe("db", () => {
 
 			expect(result).toEqual([]);
 			expect(mockSql).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("deleteLatestExpense", () => {
+		it("returns { found: false } when no expenses exist", async () => {
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+
+			const result = await deleteLatestExpense(mockSql, 42);
+
+			expect(result).toEqual({ found: false, categoryDeleted: false });
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("returns { found: true, categoryDeleted: false } when category still has other expenses", async () => {
+			(mockSql as ReturnType<typeof vi.fn>)
+				.mockResolvedValueOnce([{ id: 10, amount: 300, category_id: 7, expense_date: "2026-06-17" }])
+				.mockResolvedValueOnce([{ name: "gym" }])
+				.mockResolvedValueOnce([{ count: 2 }]);
+
+			const result = await deleteLatestExpense(mockSql, 42);
+
+			expect(result).toEqual({ found: true, categoryDeleted: false, expense: { id: 10, amount: 300, category: "gym", expense_date: "2026-06-17" } });
+			expect(mockSql).toHaveBeenCalledTimes(3);
+		});
+
+		it("returns { found: true, categoryDeleted: true } and deletes category when last expense is removed", async () => {
+			(mockSql as ReturnType<typeof vi.fn>)
+				.mockResolvedValueOnce([{ id: 10, amount: 300, category_id: 7, expense_date: "2026-06-17" }])
+				.mockResolvedValueOnce([{ name: "gym" }])
+				.mockResolvedValueOnce([{ count: 0 }])
+				.mockResolvedValueOnce([]);
+
+			const result = await deleteLatestExpense(mockSql, 42);
+
+			expect(result).toEqual({ found: true, categoryDeleted: true, expense: { id: 10, amount: 300, category: "gym", expense_date: "2026-06-17" } });
+			expect(mockSql).toHaveBeenCalledTimes(4);
 		});
 	});
 
