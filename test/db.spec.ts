@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense, fetchTopExpenses, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses, renameCategory } from "../src/db";
+import { fetchReport, fetchRecent, fetchCategoryTotals, categoryExists, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense, fetchTopExpenses, fetchPeriodSummary, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses, renameCategory } from "../src/db";
 import type { Sql } from "../src/types";
 
 describe("db", () => {
@@ -391,6 +391,24 @@ describe("db", () => {
 		});
 	});
 
+	describe("categoryExists", () => {
+		it("returns true when the category exists", async () => {
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue([{ 1: 1 }]);
+
+			const result = await categoryExists(mockSql, 42, "gym");
+
+			expect(result).toBe(true);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("returns false when the category does not exist", async () => {
+			const result = await categoryExists(mockSql, 42, "gym");
+
+			expect(result).toBe(false);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+	});
+
 	describe("fetchCategoryTotals", () => {
 		it("returns rows from sql with no filter", async () => {
 			const rows = [{ category: "gym", total: 500 }, { category: "food", total: 200 }];
@@ -418,6 +436,43 @@ describe("db", () => {
 			await fetchCategoryTotals(mockSql, 42, "2026-05-01");
 
 			expect(mockSql).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("fetchPeriodSummary", () => {
+		it("returns total, count, and biggest with no category filter", async () => {
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue([{ total: 750, count: 5, biggest: 300 }]);
+
+			const result = await fetchPeriodSummary(mockSql, 42, "2026-05");
+
+			expect(result).toEqual({ total: 750, count: 5, biggest: 300 });
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("returns total, count, and biggest with category filter", async () => {
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue([{ total: 300, count: 3, biggest: 150 }]);
+
+			const result = await fetchPeriodSummary(mockSql, 42, "2026-05", "gym");
+
+			expect(result).toEqual({ total: 300, count: 3, biggest: 150 });
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("returns zeros when no expenses exist in the period", async () => {
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue([{ total: 0, count: 0, biggest: 0 }]);
+
+			const result = await fetchPeriodSummary(mockSql, 42, "2026-01");
+
+			expect(result).toEqual({ total: 0, count: 0, biggest: 0 });
+		});
+
+		it("includes AND c.name filter when category is given", async () => {
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue([{ total: 0, count: 0, biggest: 0 }]);
+
+			await fetchPeriodSummary(mockSql, 42, "2026-05", "gym");
+
+			const sqlStrings = (mockSql as ReturnType<typeof vi.fn>).mock.calls[0][0] as string[];
+			expect(sqlStrings.join("")).toContain("c.name");
 		});
 	});
 });

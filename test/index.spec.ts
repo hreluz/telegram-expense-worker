@@ -541,6 +541,42 @@ describe("telegram-expense-worker", () => {
 		});
 	});
 
+	describe("/compare", () => {
+		it("returns ok with formatted output", async () => {
+			mockSql.mockResolvedValue([{ total: 300, count: 3, biggest: 150 }]);
+
+			const request = postRequest(telegramMessage("/compare gym 2026-04 2026-05"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+		});
+
+		it("returns ok with no args (defaults to current vs previous month)", async () => {
+			mockSql.mockResolvedValue([{ total: 0, count: 0, biggest: 0 }]);
+
+			const request = postRequest(telegramMessage("/compare"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+		});
+
+		it("returns ok: false when filter is invalid", async () => {
+			const request = postRequest(telegramMessage("/compare gym june july"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(false);
+		});
+	});
+
 	describe("/search", () => {
 		it("returns matching rows when keyword matches", async () => {
 			mockSql.mockResolvedValue([

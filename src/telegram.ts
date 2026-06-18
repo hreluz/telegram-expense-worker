@@ -17,6 +17,7 @@ export async function setTelegramCommands(token: string) {
 	const commands = [
 		{ command: 'list', description: 'Last 10 expenses (or /list 2026-05 to filter)' },
 		{ command: 'top', description: 'Top expenses by amount (e.g. /top 5 or /top 5 2026-05)' },
+		{ command: 'compare', description: 'Compare spending across two periods (e.g. /compare gym 2026-04 2026-05)' },
 		{ command: 'search', description: 'Find expenses by keyword (category or note)' },
 		{ command: 'report', description: 'Export expenses as CSV (or /report 2026-05 to filter)' },
 		{ command: 'delete', description: 'Delete an expense by ID' },
