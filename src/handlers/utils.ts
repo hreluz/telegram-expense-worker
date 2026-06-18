@@ -16,6 +16,7 @@ Format: <code>&lt;amount&gt; &lt;category&gt; [@YYYY-MM-DD] [note]</code>
 <code>/list 2026-05</code> — filter by year, month, or day
 <code>/top</code> — top 10 expenses by amount
 <code>/top 5 2026-05</code> — top N in a period
+<code>/compare gym 2026-04 2026-05</code> — compare two periods
 <code>/search gym</code> — find expenses by category or note
 <code>/report</code> — export full history as CSV
 <code>/summary</code> — monthly spending snapshot

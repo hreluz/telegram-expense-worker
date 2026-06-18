@@ -53,6 +53,29 @@ ID    Date        Amount    Category      Note
 
 Output uses the same table format as `/list`.
 
+**Compare spending across two periods** — send `/compare` to see a side-by-side breakdown of total, count, and biggest expense for two date ranges. Category is optional; if omitted, all spending is compared. Period 2 defaults to the previous period if not given:
+
+```
+/compare gym 2026-04 2026-05   # gym: Apr vs May
+/compare gym 2026-05           # gym: May vs Apr (period2 defaults to previous)
+/compare gym                   # gym: current month vs last month
+/compare 2026-04 2026-05       # all categories: Apr vs May
+/compare                       # all categories: current vs last month
+```
+
+Example output:
+```
+gym: Apr 2026 vs May 2026
+
+           Apr 2026      May 2026
+Total      300.00        450.00
+Count      3             5
+Biggest    150.00        200.00
+Change     —             +150.00 (+50%)
+```
+
+If a category is specified but doesn't exist, a `Category not found.` message is sent.
+
 **Search expenses** — send `/search <keyword>` to find expenses where the category name or note contains the keyword. The search is case-insensitive and returns all matching entries across all time, formatted the same way as `/list`.
 
 ```

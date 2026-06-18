@@ -85,6 +85,27 @@ export async function fetchTopExpenses(sql: Sql, telegramUserId: number, limit: 
 	`;
 }
 
+export async function fetchPeriodSummary(sql: Sql, telegramUserId: number, filter: string, category?: string): Promise<{ total: number; count: number; biggest: number }> {
+	const pattern = `${filter}%`;
+	const rows = category
+		? await sql`
+			SELECT COALESCE(SUM(e.amount), 0)::float AS total, COUNT(*)::int AS count, COALESCE(MAX(e.amount), 0)::float AS biggest
+			FROM expenses e
+			JOIN categories c ON c.id = e.category_id
+			WHERE e.telegram_user_id = ${telegramUserId}
+				AND e.expense_date::text LIKE ${pattern}
+				AND c.name = ${category}
+		`
+		: await sql`
+			SELECT COALESCE(SUM(e.amount), 0)::float AS total, COUNT(*)::int AS count, COALESCE(MAX(e.amount), 0)::float AS biggest
+			FROM expenses e
+			JOIN categories c ON c.id = e.category_id
+			WHERE e.telegram_user_id = ${telegramUserId}
+				AND e.expense_date::text LIKE ${pattern}
+		`;
+	return { total: Number(rows[0].total), count: Number(rows[0].count), biggest: Number(rows[0].biggest) };
+}
+
 export async function fetchBiggestExpense(sql: Sql, telegramUserId: number, filter: string) {
 	const pattern = `${filter}%`;
 	return sql`

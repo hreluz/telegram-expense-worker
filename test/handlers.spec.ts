@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { handleReport, handleList, handleAddExpense, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, handleSearch, handleCallbackQuery, handleRename, handleTop, HELP_TEXT } from "../src/handlers";
+import { handleReport, handleList, handleAddExpense, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, handleSearch, handleCallbackQuery, handleRename, handleTop, handleCompare, HELP_TEXT } from "../src/handlers";
 import type { Sql } from "../src/types";
 
-const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockSaveLog, mockDeleteExpense, mockFetchBiggestExpense, mockDeleteLatestExpense, mockSetBudget, mockRemoveBudget, mockFetchBudgets, mockFetchBudgetForCategory, mockSearchExpenses, mockRenameCategory, mockFetchTopExpenses, mockSendTelegramMessage, mockSendTelegramDocument, mockAnswerCallbackQuery, mockEditMessageReplyMarkup } = vi.hoisted(() => ({
+const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockSaveLog, mockDeleteExpense, mockFetchBiggestExpense, mockDeleteLatestExpense, mockSetBudget, mockRemoveBudget, mockFetchBudgets, mockFetchBudgetForCategory, mockSearchExpenses, mockRenameCategory, mockFetchTopExpenses, mockFetchPeriodSummary, mockCategoryExists, mockSendTelegramMessage, mockSendTelegramDocument, mockAnswerCallbackQuery, mockEditMessageReplyMarkup } = vi.hoisted(() => ({
 	mockFetchReport: vi.fn().mockResolvedValue([]),
 	mockFetchRecent: vi.fn().mockResolvedValue([]),
 	mockFetchCategoryTotals: vi.fn().mockResolvedValue([]),
@@ -18,6 +18,8 @@ const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpen
 	mockSearchExpenses: vi.fn().mockResolvedValue([]),
 	mockRenameCategory: vi.fn().mockResolvedValue({ found: true, count: 3 }),
 	mockFetchTopExpenses: vi.fn().mockResolvedValue([]),
+	mockFetchPeriodSummary: vi.fn().mockResolvedValue({ total: 0, count: 0, biggest: 0 }),
+	mockCategoryExists: vi.fn().mockResolvedValue(true),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
 	mockSendTelegramDocument: vi.fn().mockResolvedValue(undefined),
 	mockAnswerCallbackQuery: vi.fn().mockResolvedValue(undefined),
@@ -40,6 +42,8 @@ vi.mock("../src/db", () => ({
 	searchExpenses: mockSearchExpenses,
 	renameCategory: mockRenameCategory,
 	fetchTopExpenses: mockFetchTopExpenses,
+	fetchPeriodSummary: mockFetchPeriodSummary,
+	categoryExists: mockCategoryExists,
 }));
 
 vi.mock("../src/telegram", () => ({
@@ -69,6 +73,8 @@ beforeEach(() => {
 	mockSearchExpenses.mockResolvedValue([]);
 	mockRenameCategory.mockResolvedValue({ found: true, count: 3 });
 	mockFetchTopExpenses.mockResolvedValue([]);
+	mockFetchPeriodSummary.mockResolvedValue({ total: 0, count: 0, biggest: 0 });
+	mockCategoryExists.mockResolvedValue(true);
 	mockSendTelegramMessage.mockResolvedValue(undefined);
 	mockSendTelegramDocument.mockResolvedValue(undefined);
 	mockAnswerCallbackQuery.mockResolvedValue(undefined);
@@ -901,6 +907,96 @@ describe("handleTop", () => {
 		mockFetchTopExpenses.mockRejectedValue(new Error("DB error"));
 
 		const response = await handleTop(sql, 42, token, "");
+
+		expect(response.status).toBe(200);
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "DB error");
+	});
+});
+
+describe("handleCompare", () => {
+	it("defaults to current month vs previous month when no args", async () => {
+		await handleCompare(sql, 42, token, "");
+
+		expect(mockFetchPeriodSummary).toHaveBeenCalledTimes(2);
+		expect(mockFetchPeriodSummary).toHaveBeenCalledWith(sql, 42, expect.any(String), undefined);
+	});
+
+	it("parses category and two periods", async () => {
+		await handleCompare(sql, 42, token, "gym 2026-04 2026-05");
+
+		expect(mockFetchPeriodSummary).toHaveBeenCalledWith(sql, 42, "2026-04", "gym");
+		expect(mockFetchPeriodSummary).toHaveBeenCalledWith(sql, 42, "2026-05", "gym");
+	});
+
+	it("defaults period2 to previous month when only period1 given", async () => {
+		await handleCompare(sql, 42, token, "gym 2026-05");
+
+		expect(mockFetchPeriodSummary).toHaveBeenCalledWith(sql, 42, "2026-05", "gym");
+		expect(mockFetchPeriodSummary).toHaveBeenCalledWith(sql, 42, "2026-04", "gym");
+	});
+
+	it("treats first token as period1 when it matches date pattern (no category)", async () => {
+		await handleCompare(sql, 42, token, "2026-04 2026-05");
+
+		expect(mockFetchPeriodSummary).toHaveBeenCalledWith(sql, 42, "2026-04", undefined);
+		expect(mockFetchPeriodSummary).toHaveBeenCalledWith(sql, 42, "2026-05", undefined);
+	});
+
+	it("sends formatted table with totals and change calculation", async () => {
+		mockFetchPeriodSummary
+			.mockResolvedValueOnce({ total: 300, count: 3, biggest: 150 })
+			.mockResolvedValueOnce({ total: 450, count: 5, biggest: 200 });
+
+		await handleCompare(sql, 42, token, "gym 2026-04 2026-05");
+
+		const sent = mockSendTelegramMessage.mock.calls[0][2] as string;
+		expect(sent).toContain("gym");
+		expect(sent).toContain("300.00");
+		expect(sent).toContain("450.00");
+		expect(sent).toContain("+150.00");
+		expect(sent).toContain("+50%");
+	});
+
+	it("shows zero values when no expenses exist in a period", async () => {
+		await handleCompare(sql, 42, token, "gym 2026-04 2026-05");
+
+		const sent = mockSendTelegramMessage.mock.calls[0][2] as string;
+		expect(sent).toContain("0.00");
+	});
+
+	it("shows — for change when period1 total is zero", async () => {
+		mockFetchPeriodSummary
+			.mockResolvedValueOnce({ total: 0, count: 0, biggest: 0 })
+			.mockResolvedValueOnce({ total: 0, count: 0, biggest: 0 });
+
+		await handleCompare(sql, 42, token, "gym 2026-04 2026-05");
+
+		const sent = mockSendTelegramMessage.mock.calls[0][2] as string;
+		expect(sent).toContain("—");
+	});
+
+	it("sends 'Category not found.' when the category does not exist", async () => {
+		mockCategoryExists.mockResolvedValue(false);
+
+		const response = await handleCompare(sql, 42, token, "gym 2026-04 2026-05");
+
+		const body = await response.json() as { ok: boolean };
+		expect(body.ok).toBe(false);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Category 'gym' not found.");
+		expect(mockFetchPeriodSummary).not.toHaveBeenCalled();
+	});
+
+	it("skips category check when no category given", async () => {
+		await handleCompare(sql, 42, token, "2026-04 2026-05");
+
+		expect(mockCategoryExists).not.toHaveBeenCalled();
+	});
+
+	it("returns 200 and logs when fetchPeriodSummary throws", async () => {
+		mockFetchPeriodSummary.mockRejectedValue(new Error("DB error"));
+
+		const response = await handleCompare(sql, 42, token, "gym 2026-04 2026-05");
 
 		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");

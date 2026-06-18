@@ -38,8 +38,8 @@ This is a Cloudflare Worker acting as a Telegram bot webhook. Telegram POSTs upd
 ```
 src/types.ts              — shared types: Env, TelegramBody, Expense, Sql
 src/db.ts                 — barrel re-export of src/db/*
-src/db/expenses.ts        — fetchReport, fetchRecent, saveExpense, deleteExpense, deleteLatestExpense, fetchBiggestExpense, searchExpenses, fetchTopExpenses
-src/db/categories.ts      — fetchCategoryTotals, renameCategory
+src/db/expenses.ts        — fetchReport, fetchRecent, saveExpense, deleteExpense, deleteLatestExpense, fetchBiggestExpense, searchExpenses, fetchTopExpenses, fetchPeriodSummary
+src/db/categories.ts      — fetchCategoryTotals, renameCategory, categoryExists
 src/db/logs.ts            — migrate, saveLog, fetchLogs
 src/db/budgets.ts         — setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory
 src/telegram.ts           — outbound API: sendTelegramMessage, dropPendingUpdates, setTelegramCommands, answerCallbackQuery, editMessageReplyMarkup
@@ -61,6 +61,7 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 - `/budget <category> <amount>` — set a monthly budget for a category (upsert). `/budget <category> off` removes it. `/budget` with no args lists all budgets. Stored by category name in the `budgets` table so budgets can be set before any expenses exist.
 - `/search <keyword>` — case-insensitive substring search across category name and note fields; returns all matching expenses (no limit) formatted like `/list`.
 - `/top [N] [filter]` — top N expenses ordered by amount descending (default N=10). Same date filter syntax as `/list`. First token is N if it's a plain integer, otherwise treated as the filter. N is clamped to minimum 1.
+- `/compare [category] [period1] [period2]` — side-by-side summary (total, count, biggest) for two periods. Category is optional; if omitted, compares all spending. Period2 defaults to the previous period (previous month for `YYYY-MM`, previous year for `YYYY`). Uses `fetchPeriodSummary` (one SQL call per period) and `categoryExists` to validate the category before querying. Change = period2 − period1.
 - `/rename <old> <new>` — merge all expenses from `<old>` category into `<new>`, then delete `<old>`. Both names are lowercased. If `<new>` doesn't exist it's created via upsert; if it already exists expenses are merged into it.
 - `/undo` — delete the most recently added expense (scoped to the current user). Same orphan-category cleanup as `/delete`.
 - `/delete <id>` — delete an expense by ID (scoped to the current user). If the deleted expense was the last one in its category, the category is auto-deleted too.
