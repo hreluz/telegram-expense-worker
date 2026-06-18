@@ -19,7 +19,7 @@ export async function handleBudget(sql: Sql, telegramUserId: number, token: stri
 			const message = error instanceof Error ? error.message : 'Unknown error';
 			await saveLog(sql, telegramUserId, message);
 			await trySend(sql, token, telegramUserId, 'Something went wrong.');
-			return Response.json({ ok: false, error: message }, { status: 500 });
+			return Response.json({ ok: false, error: message });
 		}
 	}
 
@@ -39,7 +39,7 @@ export async function handleBudget(sql: Sql, telegramUserId: number, token: stri
 			const message = error instanceof Error ? error.message : 'Unknown error';
 			await saveLog(sql, telegramUserId, message);
 			await trySend(sql, token, telegramUserId, 'Something went wrong.');
-			return Response.json({ ok: false, error: message }, { status: 500 });
+			return Response.json({ ok: false, error: message });
 		}
 	}
 

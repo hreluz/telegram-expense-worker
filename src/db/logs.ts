@@ -37,6 +37,15 @@ export async function migrate(sql: Sql) {
 			UNIQUE (telegram_user_id, category)
 		)
 	`;
+	await sql`
+		CREATE TABLE IF NOT EXISTS user_settings (
+			id SERIAL PRIMARY KEY,
+			telegram_user_id BIGINT NOT NULL,
+			key TEXT NOT NULL,
+			value TEXT NOT NULL,
+			UNIQUE (telegram_user_id, key)
+		)
+	`;
 }
 
 export async function saveLog(sql: Sql, telegramUserId: number, message: string) {

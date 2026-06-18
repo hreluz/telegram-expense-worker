@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchReport, fetchRecent, fetchCategoryTotals, categoryExists, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, updateExpenseNote, fetchBiggestExpense, fetchTopExpenses, fetchPeriodSummary, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses, renameCategory } from "../src/db";
+import { fetchReport, fetchRecent, fetchCategoryTotals, categoryExists, fetchAllCategories, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, updateExpenseNote, fetchBiggestExpense, fetchTopExpenses, fetchPeriodSummary, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses, renameCategory, setUserSetting, getUserSetting } from "../src/db";
 import type { Sql } from "../src/types";
 
 describe("db", () => {
@@ -109,10 +109,36 @@ describe("db", () => {
 	});
 
 	describe("migrate", () => {
-		it("creates the categories, expenses, logs, and budgets tables", async () => {
+		it("creates the categories, expenses, logs, budgets, and user_settings tables", async () => {
 			await migrate(mockSql);
 
-			expect(mockSql).toHaveBeenCalledTimes(4);
+			expect(mockSql).toHaveBeenCalledTimes(5);
+		});
+	});
+
+	describe("setUserSetting", () => {
+		it("calls sql once to upsert the setting", async () => {
+			await setUserSetting(mockSql, 42, "category_picker", "off");
+
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("getUserSetting", () => {
+		it("returns the value when the setting exists", async () => {
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue([{ value: "off" }]);
+
+			const result = await getUserSetting(mockSql, 42, "category_picker");
+
+			expect(result).toBe("off");
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("returns null when the setting does not exist", async () => {
+			const result = await getUserSetting(mockSql, 42, "category_picker");
+
+			expect(result).toBeNull();
+			expect(mockSql).toHaveBeenCalledOnce();
 		});
 	});
 
@@ -415,6 +441,24 @@ describe("db", () => {
 			const updateCall = (mockSql as ReturnType<typeof vi.fn>).mock.calls[2];
 			const sqlStrings = updateCall[0] as string[];
 			expect(sqlStrings.join("")).toContain("RETURNING");
+		});
+	});
+
+	describe("fetchAllCategories", () => {
+		it("returns category names as a string array", async () => {
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue([{ name: "food" }, { name: "gym" }]);
+
+			const result = await fetchAllCategories(mockSql, 42);
+
+			expect(result).toEqual(["food", "gym"]);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("returns an empty array when the user has no categories", async () => {
+			const result = await fetchAllCategories(mockSql, 42);
+
+			expect(result).toEqual([]);
+			expect(mockSql).toHaveBeenCalledOnce();
 		});
 	});
 

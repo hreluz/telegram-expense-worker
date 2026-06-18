@@ -32,6 +32,9 @@ Format: <code>&lt;amount&gt; &lt;category&gt; [@YYYY-MM-DD] [note]</code>
 <code>/budget gym off</code> — remove limit
 <code>/budget</code> — list all budgets
 
+⚙️ <b>Settings</b>
+<code>/settings</code> — open the settings menu
+
 💡 Add <code>categories</code> after <code>/list</code> or <code>/report</code> for totals
 📅 Date filter: YYYY, YYYY-MM, or YYYY-MM-DD`;
 

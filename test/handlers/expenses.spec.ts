@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { handleAddExpense, handleDelete, handleUndo, handleNote, handleCallbackQuery } from "../../src/handlers/expenses";
 import type { Sql } from "../../src/types";
 
-const { mockSaveExpense, mockSaveLog, mockDeleteExpense, mockDeleteLatestExpense, mockFetchBudgetForCategory, mockFetchCategoryTotals, mockUpdateExpenseNote, mockSendTelegramMessage, mockAnswerCallbackQuery, mockEditMessageReplyMarkup } = vi.hoisted(() => ({
+const { mockSaveExpense, mockSaveLog, mockDeleteExpense, mockDeleteLatestExpense, mockFetchBudgetForCategory, mockFetchCategoryTotals, mockUpdateExpenseNote, mockCategoryExists, mockFetchAllCategories, mockGetUserSetting, mockHandleSettingCallback, mockSendTelegramMessage, mockAnswerCallbackQuery, mockEditMessageReplyMarkup } = vi.hoisted(() => ({
 	mockSaveExpense: vi.fn().mockResolvedValue(99),
 	mockSaveLog: vi.fn().mockResolvedValue(undefined),
 	mockDeleteExpense: vi.fn().mockResolvedValue({ found: true, categoryDeleted: false }),
@@ -10,6 +10,10 @@ const { mockSaveExpense, mockSaveLog, mockDeleteExpense, mockDeleteLatestExpense
 	mockFetchBudgetForCategory: vi.fn().mockResolvedValue([]),
 	mockFetchCategoryTotals: vi.fn().mockResolvedValue([]),
 	mockUpdateExpenseNote: vi.fn().mockResolvedValue(true),
+	mockCategoryExists: vi.fn().mockResolvedValue(true),
+	mockFetchAllCategories: vi.fn().mockResolvedValue([]),
+	mockGetUserSetting: vi.fn().mockResolvedValue(null),
+	mockHandleSettingCallback: vi.fn().mockResolvedValue(undefined),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
 	mockAnswerCallbackQuery: vi.fn().mockResolvedValue(undefined),
 	mockEditMessageReplyMarkup: vi.fn().mockResolvedValue(undefined),
@@ -23,12 +27,19 @@ vi.mock("../../src/db", () => ({
 	fetchBudgetForCategory: mockFetchBudgetForCategory,
 	fetchCategoryTotals: mockFetchCategoryTotals,
 	updateExpenseNote: mockUpdateExpenseNote,
+	categoryExists: mockCategoryExists,
+	fetchAllCategories: mockFetchAllCategories,
+	getUserSetting: mockGetUserSetting,
 }));
 
 vi.mock("../../src/telegram", () => ({
 	sendTelegramMessage: mockSendTelegramMessage,
 	answerCallbackQuery: mockAnswerCallbackQuery,
 	editMessageReplyMarkup: mockEditMessageReplyMarkup,
+}));
+
+vi.mock("../../src/handlers/settings", () => ({
+	handleSettingCallback: mockHandleSettingCallback,
 }));
 
 const sql = {} as unknown as Sql;
@@ -43,19 +54,22 @@ beforeEach(() => {
 	mockFetchBudgetForCategory.mockResolvedValue([]);
 	mockFetchCategoryTotals.mockResolvedValue([]);
 	mockUpdateExpenseNote.mockResolvedValue(true);
+	mockCategoryExists.mockResolvedValue(true);
+	mockFetchAllCategories.mockResolvedValue([]);
+	mockGetUserSetting.mockResolvedValue(null);
+	mockHandleSettingCallback.mockResolvedValue(undefined);
 	mockSendTelegramMessage.mockResolvedValue(undefined);
 	mockAnswerCallbackQuery.mockResolvedValue(undefined);
 	mockEditMessageReplyMarkup.mockResolvedValue(undefined);
 });
 
 describe("handleAddExpense", () => {
-	it("saves the expense and returns it", async () => {
+	it("saves the expense and sends confirmation", async () => {
 		const response = await handleAddExpense(sql, 42, "300 gym", token);
-		const body = await response.json() as { ok: boolean; message: string; expense: object };
+		const body = await response.json() as { ok: boolean; message: string };
 
 		expect(body.ok).toBe(true);
 		expect(body.message).toBe("Saved");
-		expect(body.expense).toMatchObject({ amount: 300, category: "gym", note: "" });
 		expect(mockSaveExpense).toHaveBeenCalledWith(sql, 42, expect.objectContaining({ amount: 300, category: "gym", note: "" }));
 	});
 
@@ -116,6 +130,78 @@ describe("handleAddExpense", () => {
 
 		const sent = mockSendTelegramMessage.mock.calls[0][2] as string;
 		expect(sent).toContain("Warning: gym is over budget (150.00 over this month)");
+	});
+
+	it("sends category picker when typed category is new and existing categories are present", async () => {
+		mockCategoryExists.mockResolvedValue(false);
+		mockFetchAllCategories.mockResolvedValue(["food", "gym", "transport"]);
+
+		const response = await handleAddExpense(sql, 42, "300 gmy", token);
+		const body = await response.json() as { ok: boolean; message: string };
+
+		expect(body.ok).toBe(true);
+		expect(body.message).toBe("Category picker sent");
+		expect(mockSaveExpense).not.toHaveBeenCalled();
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(
+			token, 42,
+			"Category 'gmy' is new. Did you mean one of these?",
+			undefined,
+			expect.objectContaining({ inline_keyboard: expect.any(Array) }),
+			undefined,
+		);
+	});
+
+	it("includes Keep button in picker keyboard for the typed category", async () => {
+		mockCategoryExists.mockResolvedValue(false);
+		mockFetchAllCategories.mockResolvedValue(["food", "gym"]);
+
+		await handleAddExpense(sql, 42, "300 gmy", token);
+
+		const keyboard = (mockSendTelegramMessage.mock.calls[0][4] as { inline_keyboard: { text: string; callback_data: string }[][] }).inline_keyboard;
+		const allButtons = keyboard.flat();
+		expect(allButtons).toContainEqual({ text: "Keep 'gmy'", callback_data: "catpick_gmy" });
+		expect(allButtons).toContainEqual({ text: "food", callback_data: "catpick_food" });
+		expect(allButtons).toContainEqual({ text: "gym", callback_data: "catpick_gym" });
+	});
+
+	it("saves immediately when typed category is new but no existing categories exist", async () => {
+		mockCategoryExists.mockResolvedValue(false);
+		mockFetchAllCategories.mockResolvedValue([]);
+
+		await handleAddExpense(sql, 42, "300 gmy", token);
+
+		expect(mockSaveExpense).toHaveBeenCalledWith(sql, 42, expect.objectContaining({ category: "gmy" }));
+	});
+
+	it("saves immediately when picker setting is off, even if category is new and existing categories exist", async () => {
+		mockCategoryExists.mockResolvedValue(false);
+		mockGetUserSetting.mockResolvedValue('off');
+		mockFetchAllCategories.mockResolvedValue(["food", "gym"]);
+
+		await handleAddExpense(sql, 42, "300 gmy", token);
+
+		expect(mockSaveExpense).toHaveBeenCalledWith(sql, 42, expect.objectContaining({ category: "gmy" }));
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(
+			token, 42,
+			expect.stringContaining("Saved: 300 gmy"),
+			undefined,
+			expect.objectContaining({ inline_keyboard: [[{ text: '🗑 Undo', callback_data: 'undo_99' }]] }),
+		);
+	});
+
+	it("sends picker as reply to the original message when messageId is given", async () => {
+		mockCategoryExists.mockResolvedValue(false);
+		mockFetchAllCategories.mockResolvedValue(["food"]);
+
+		await handleAddExpense(sql, 42, "300 gmy", token, 777);
+
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(
+			token, 42,
+			expect.any(String),
+			undefined,
+			expect.any(Object),
+			777,
+		);
 	});
 });
 
@@ -254,10 +340,14 @@ describe("handleNote", () => {
 	});
 });
 
-const makeCallbackQuery = (data: string, userId = 42, messageId = 100) => ({
+const makeCallbackQuery = (data: string, userId = 42, messageId = 100, replyToText?: string) => ({
 	id: 'cq_123',
 	from: { id: userId },
-	message: { message_id: messageId, chat: { id: userId } },
+	message: {
+		message_id: messageId,
+		chat: { id: userId },
+		...(replyToText !== undefined ? { reply_to_message: { text: replyToText } } : {}),
+	},
 	data,
 });
 
@@ -305,5 +395,49 @@ describe("handleCallbackQuery", () => {
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
 		expect(mockAnswerCallbackQuery).toHaveBeenCalledWith(token, 'cq_123');
 		expect(mockEditMessageReplyMarkup).toHaveBeenCalledWith(token, 42, 100, {});
+	});
+
+	it("saves the expense with chosen category when catpick button is tapped", async () => {
+		const response = await handleCallbackQuery(sql, makeCallbackQuery('catpick_food', 42, 100, '300 gmy my note'), token);
+		const body = await response.json() as { ok: boolean };
+
+		expect(body.ok).toBe(true);
+		expect(mockSaveExpense).toHaveBeenCalledWith(sql, 42, expect.objectContaining({ amount: 300, category: "food", note: "my note" }));
+	});
+
+	it("sends confirmation with undo button after catpick save", async () => {
+		await handleCallbackQuery(sql, makeCallbackQuery('catpick_food', 42, 100, '300 gmy'), token);
+
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(
+			token, 42,
+			expect.stringContaining("Saved: 300 food"),
+			undefined,
+			expect.objectContaining({ inline_keyboard: [[{ text: '🗑 Undo', callback_data: 'undo_99' }]] }),
+		);
+	});
+
+	it("sends error message when catpick has no reply_to_message text", async () => {
+		await handleCallbackQuery(sql, makeCallbackQuery('catpick_food'), token);
+
+		expect(mockSaveExpense).not.toHaveBeenCalled();
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Could not retrieve original message. Please re-send your expense.");
+	});
+
+	it("answers callback and clears keyboard after catpick", async () => {
+		await handleCallbackQuery(sql, makeCallbackQuery('catpick_food', 42, 100, '300 gmy'), token);
+
+		expect(mockAnswerCallbackQuery).toHaveBeenCalledWith(token, 'cq_123');
+		expect(mockEditMessageReplyMarkup).toHaveBeenCalledWith(token, 42, 100, {});
+	});
+
+	it("delegates setting| callbacks to handleSettingCallback and returns early", async () => {
+		const response = await handleCallbackQuery(sql, makeCallbackQuery('setting|category_picker|off|0'), token);
+		const body = await response.json() as { ok: boolean };
+
+		expect(body.ok).toBe(true);
+		expect(mockHandleSettingCallback).toHaveBeenCalledWith(sql, token, 42, 42, 100, 'cq_123', 'setting|category_picker|off|0');
+		// outer cleanup must NOT run — handleSettingCallback manages its own answer/edit
+		expect(mockAnswerCallbackQuery).not.toHaveBeenCalled();
+		expect(mockEditMessageReplyMarkup).not.toHaveBeenCalled();
 	});
 });

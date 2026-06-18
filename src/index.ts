@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import type { Env, TelegramBody } from "./types";
-import { handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, handleSearch, handleCallbackQuery, handleRename, handleTop, handleCompare, handleNote } from "./handlers";
+import { handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, handleSettings, handleSearch, handleCallbackQuery, handleRename, handleTop, handleCompare, handleNote } from "./handlers";
 
 function parseViewAndFilter(args: string): { view: 'expenses' | 'categories'; filter: string | undefined } {
 	const [first, ...rest] = args.split(/\s+/);
@@ -33,6 +33,7 @@ export default {
 		if (text === "/summary") return handleSummary(sql, telegramUserId, env.TELEGRAM_TOKEN);
 		if (text === "/undo") return handleUndo(sql, telegramUserId, env.TELEGRAM_TOKEN);
 		if (text.startsWith("/budget")) return handleBudget(sql, telegramUserId, env.TELEGRAM_TOKEN, text.slice(7).trim());
+		if (text.startsWith("/settings")) return handleSettings(sql, telegramUserId, env.TELEGRAM_TOKEN, text.slice(9).trim());
 		if (text === "/start") return handleHelp(sql, telegramUserId, env.TELEGRAM_TOKEN);
 		if (text === "/help") return handleHelp(sql, telegramUserId, env.TELEGRAM_TOKEN);
 		if (text === "/migrate") return handleMigrate(sql, telegramUserId, env.TELEGRAM_TOKEN, env.ADMIN_IDS);
@@ -69,6 +70,6 @@ export default {
 			return handleDelete(sql, telegramUserId, env.TELEGRAM_TOKEN, args);
 		}
 
-		return handleAddExpense(sql, telegramUserId, text, env.TELEGRAM_TOKEN);
+		return handleAddExpense(sql, telegramUserId, text, env.TELEGRAM_TOKEN, body?.message?.message_id);
 	},
 } satisfies ExportedHandler<Env>;

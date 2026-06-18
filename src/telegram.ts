@@ -1,7 +1,8 @@
-export async function sendTelegramMessage(token: string, chatId: number, text: string, parseMode?: string, replyMarkup?: Record<string, unknown>) {
+export async function sendTelegramMessage(token: string, chatId: number, text: string, parseMode?: string, replyMarkup?: Record<string, unknown>, replyToMessageId?: number) {
 	const body: Record<string, unknown> = { chat_id: chatId, text };
 	if (parseMode) body.parse_mode = parseMode;
 	if (replyMarkup) body.reply_markup = replyMarkup;
+	if (replyToMessageId) body.reply_to_message_id = replyToMessageId;
 	const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
@@ -26,6 +27,7 @@ export async function setTelegramCommands(token: string) {
 		{ command: 'undo', description: 'Delete the most recently added expense' },
 		{ command: 'summary', description: 'Spending snapshot for the current month' },
 		{ command: 'budget', description: 'Set or view monthly category budgets' },
+		{ command: 'settings', description: 'View or update preferences (e.g. category picker)' },
 		{ command: 'help', description: 'Show commands and examples' },
 	];
 	const res = await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {

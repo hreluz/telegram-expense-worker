@@ -1,34 +1,65 @@
 import type { Sql, TelegramBody } from '../types';
-import { saveExpense, saveLog, deleteExpense, deleteLatestExpense, fetchBudgetForCategory, fetchCategoryTotals, updateExpenseNote } from '../db';
-import { answerCallbackQuery, editMessageReplyMarkup } from '../telegram';
+import { saveExpense, saveLog, deleteExpense, deleteLatestExpense, fetchBudgetForCategory, fetchCategoryTotals, updateExpenseNote, categoryExists, fetchAllCategories, getUserSetting } from '../db';
+import { answerCallbackQuery, editMessageReplyMarkup, sendTelegramMessage } from '../telegram';
 import { trySend, parseExpense } from './utils';
+import { handleSettingCallback } from './settings';
 
-export async function handleAddExpense(sql: Sql, telegramUserId: number, text: string, token: string): Promise<Response> {
+function buildCategoryPickerKeyboard(existingCategories: string[], typed: string): Record<string, unknown> {
+	const limited = existingCategories.slice(0, 10);
+	const rows: { text: string; callback_data: string }[][] = [];
+	for (let i = 0; i < limited.length; i += 3) {
+		rows.push(limited.slice(i, i + 3).map((cat) => ({ text: cat, callback_data: `catpick_${cat}` })));
+	}
+	rows.push([{ text: `Keep '${typed}'`, callback_data: `catpick_${typed}` }]);
+	return { inline_keyboard: rows };
+}
+
+async function saveParsedExpense(sql: Sql, token: string, telegramUserId: number, chatId: number, text: string, overrideCategory?: string): Promise<void> {
+	const expense = parseExpense(text);
+	if (overrideCategory) expense.category = overrideCategory;
+	const savedId = await saveExpense(sql, telegramUserId, expense);
+	const lines = [`Saved: ${expense.amount} ${expense.category}`, `Date: ${expense.expenseDate}`];
+	if (expense.note) lines.push(`Note: ${expense.note}`);
+
+	try {
+		const budgetRows = await fetchBudgetForCategory(sql, telegramUserId, expense.category);
+		if (budgetRows.length > 0) {
+			const budget = Number(budgetRows[0].amount);
+			const currentMonth = expense.expenseDate.slice(0, 7);
+			const totals = await fetchCategoryTotals(sql, telegramUserId, currentMonth);
+			const row = totals.find((r) => r.category === expense.category);
+			if (row && Number(row.total) > budget) {
+				const over = (Number(row.total) - budget).toFixed(2);
+				lines.push(`Warning: ${expense.category} is over budget (${over} over this month)`);
+			}
+		}
+	} catch {
+		// non-critical — skip warning on failure
+	}
+
+	const replyMarkup = { inline_keyboard: [[{ text: '🗑 Undo', callback_data: `undo_${savedId}` }]] };
+	await trySend(sql, token, chatId, lines.join('\n'), undefined, replyMarkup);
+}
+
+export async function handleAddExpense(sql: Sql, telegramUserId: number, text: string, token: string, messageId?: number): Promise<Response> {
 	try {
 		const expense = parseExpense(text);
-		const savedId = await saveExpense(sql, telegramUserId, expense);
-		const lines = [`Saved: ${expense.amount} ${expense.category}`, `Date: ${expense.expenseDate}`];
-		if (expense.note) lines.push(`Note: ${expense.note}`);
+		const exists = await categoryExists(sql, telegramUserId, expense.category);
 
-		try {
-			const budgetRows = await fetchBudgetForCategory(sql, telegramUserId, expense.category);
-			if (budgetRows.length > 0) {
-				const budget = Number(budgetRows[0].amount);
-				const currentMonth = expense.expenseDate.slice(0, 7);
-				const totals = await fetchCategoryTotals(sql, telegramUserId, currentMonth);
-				const row = totals.find((r) => r.category === expense.category);
-				if (row && Number(row.total) > budget) {
-					const over = (Number(row.total) - budget).toFixed(2);
-					lines.push(`Warning: ${expense.category} is over budget (${over} over this month)`);
+		if (!exists) {
+			const pickerSetting = await getUserSetting(sql, telegramUserId, 'category_picker');
+			if (pickerSetting !== 'off') {
+				const categories = await fetchAllCategories(sql, telegramUserId);
+				if (categories.length > 0) {
+					const keyboard = buildCategoryPickerKeyboard(categories, expense.category);
+					await sendTelegramMessage(token, telegramUserId, `Category '${expense.category}' is new. Did you mean one of these?`, undefined, keyboard, messageId);
+					return Response.json({ ok: true, message: 'Category picker sent' });
 				}
 			}
-		} catch {
-			// non-critical — skip warning on failure
 		}
 
-		const replyMarkup = { inline_keyboard: [[{ text: '🗑 Undo', callback_data: `undo_${savedId}` }]] };
-		await trySend(sql, token, telegramUserId, lines.join('\n'), undefined, replyMarkup);
-		return Response.json({ ok: true, message: 'Saved', expense });
+		await saveParsedExpense(sql, token, telegramUserId, telegramUserId, text);
+		return Response.json({ ok: true, message: 'Saved' });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Invalid input';
 		await saveLog(sql, telegramUserId, message);
@@ -136,6 +167,23 @@ export async function handleCallbackQuery(sql: Sql, callbackQuery: NonNullable<T
 			await saveLog(sql, telegramUserId, msg);
 			await trySend(sql, token, chatId, msg);
 		}
+	} else if (data?.startsWith('catpick_')) {
+		const chosenCategory = data.slice(8);
+		const originalText = message?.reply_to_message?.text;
+		if (!originalText) {
+			await trySend(sql, token, chatId, "Could not retrieve original message. Please re-send your expense.");
+		} else {
+			try {
+				await saveParsedExpense(sql, token, telegramUserId, chatId, originalText, chosenCategory);
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : 'Invalid input';
+				await saveLog(sql, telegramUserId, msg);
+				await trySend(sql, token, chatId, msg);
+			}
+		}
+	} else if (data?.startsWith('setting|')) {
+		await handleSettingCallback(sql, token, telegramUserId, chatId, messageId ?? 0, callbackQueryId, data);
+		return Response.json({ ok: true });
 	}
 
 	// Always answer and clean up buttons (best-effort)

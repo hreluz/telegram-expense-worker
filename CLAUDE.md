@@ -39,9 +39,10 @@ This is a Cloudflare Worker acting as a Telegram bot webhook. Telegram POSTs upd
 src/types.ts              — shared types: Env, TelegramBody, Expense, Sql
 src/db.ts                 — barrel re-export of src/db/*
 src/db/expenses.ts        — fetchReport, fetchRecent, saveExpense, updateExpenseNote, deleteExpense, deleteLatestExpense, fetchBiggestExpense, searchExpenses, fetchTopExpenses, fetchPeriodSummary
-src/db/categories.ts      — fetchCategoryTotals, renameCategory, categoryExists
+src/db/categories.ts      — fetchCategoryTotals, renameCategory, categoryExists, fetchAllCategories
 src/db/logs.ts            — migrate, saveLog, fetchLogs
 src/db/budgets.ts         — setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory
+src/db/settings.ts        — setUserSetting, getUserSetting, fetchAllSettings
 src/telegram.ts           — outbound API: sendTelegramMessage, dropPendingUpdates, setTelegramCommands, answerCallbackQuery, editMessageReplyMarkup
 src/handlers/utils.ts     — shared helpers: trySend, validateFilter, parseExpense, HELP_TEXT, date utilities
 src/handlers/expenses.ts  — handleAddExpense, handleDelete, handleUndo, handleNote, handleCallbackQuery
@@ -49,6 +50,7 @@ src/handlers/views.ts     — handleHelp, handleList, handleReport, handleSearch
 src/handlers/insights.ts  — handleSummary, handleCompare
 src/handlers/budgets.ts   — handleBudget
 src/handlers/categories.ts — handleRename
+src/handlers/settings.ts  — handleSettings, handleSettingCallback, SETTINGS_STEPS, buildSettingKeyboard
 src/handlers/admin.ts     — handleMigrate, handleLogs, handleDropPending
 src/handlers.ts           — barrel re-export of all handlers/* modules
 src/index.ts              — worker entry point: parse body, guard, dispatch to handler
@@ -57,6 +59,8 @@ src/index.ts              — worker entry point: parse body, guard, dispatch to
 Each layer only imports from layers below it. `index.ts` knows about handlers; handlers know about `db` and `telegram`; neither knows about each other.
 
 `index.ts` handles two Telegram update types: `message` (text commands and expense entries) and `callback_query` (inline button taps). `callback_query` updates are routed to `handleCallbackQuery` before the text dispatch.
+
+`handleCallbackQuery` in `src/handlers/expenses.ts` dispatches on `callback_data` prefix: `undo_` → delete expense; `catpick_` → re-parse `reply_to_message.text` and save with the chosen category; `setting|` → delegate to `handleSettingCallback` and return early (to avoid double-answering the callback query).
 
 ### Available commands
 
@@ -72,6 +76,7 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 - `/undo` — delete the most recently added expense (scoped to the current user). Same orphan-category cleanup as `/delete`.
 - `/delete <id>` — delete an expense by ID (scoped to the current user). If the deleted expense was the last one in its category, the category is auto-deleted too.
 - `/summary` — spending snapshot for the current month: total, vs. last month (with % change), top 3 categories, and biggest single expense. Uses `fetchCategoryTotals` (twice — current and previous month) and `fetchBiggestExpense` from `db.ts`.
+- `/settings` — open an interactive wizard to manage per-user preferences. Each setting is shown one at a time with `[ON]` / `[OFF]` inline buttons; tapping saves the value and dismisses the keyboard. Driven by the `SETTINGS_STEPS` array in `src/handlers/settings.ts` — add a new entry there to expose a new setting without touching the routing. Callback data format: `setting|<key>|<value>|<step>`. Currently available: `category_picker` (default `on`).
 - `/migrate` — create DB tables + register bot commands menu via `setTelegramCommands` (admin only)
 - `/logs` — last 10 error log entries (admin only)
 - `/droppending` — flush Telegram's webhook retry queue (admin only)
@@ -124,6 +129,7 @@ vi.mock("../src/db", () => ({ fetchReport: mockFn }));
 - `test/handlers/insights.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleSummary, handleCompare
 - `test/handlers/budgets.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleBudget
 - `test/handlers/categories.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleRename
+- `test/handlers/settings.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleSettings, handleSettingCallback, buildSettingKeyboard
 - `test/handlers/admin.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests admin handlers
 - `test/index.spec.ts` — mocks `@neondatabase/serverless` and `../src/telegram`; tests routing and HTTP-level behaviour
 - `test/telegram.spec.ts` — stubs global `fetch`; verifies URL and request body
@@ -161,6 +167,14 @@ CREATE TABLE budgets (
   category TEXT NOT NULL,
   amount NUMERIC(10, 2) NOT NULL,
   UNIQUE (telegram_user_id, category)
+);
+
+CREATE TABLE user_settings (
+  id SERIAL PRIMARY KEY,
+  telegram_user_id BIGINT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  UNIQUE (telegram_user_id, key)
 );
 ```
 
