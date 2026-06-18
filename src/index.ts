@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import type { Env, TelegramBody } from "./types";
-import { handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, handleSearch } from "./handlers";
+import { handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, handleSearch, handleCallbackQuery } from "./handlers";
 
 function parseViewAndFilter(args: string): { view: 'expenses' | 'categories'; filter: string | undefined } {
 	const [first, ...rest] = args.split(/\s+/);
@@ -17,9 +17,14 @@ export default {
 		}
 
 		const body = (await request.json()) as TelegramBody;
+		const sql = neon(env.DATABASE_URL);
+
+		if (body?.callback_query) {
+			return handleCallbackQuery(sql, body.callback_query, env.TELEGRAM_TOKEN);
+		}
+
 		const text = body?.message?.text;
 		const telegramUserId = body?.message?.from?.id ?? 123456789;
-		const sql = neon(env.DATABASE_URL);
 
 		if (!text) {
 			return Response.json({ error: "No text found" });

@@ -52,12 +52,14 @@ export async function fetchRecent(sql: Sql, telegramUserId: number, filter?: str
 	`;
 }
 
-export async function saveExpense(sql: Sql, telegramUserId: number, expense: Expense) {
+export async function saveExpense(sql: Sql, telegramUserId: number, expense: Expense): Promise<number> {
 	const categoryId = await upsertCategory(sql, telegramUserId, expense.category);
-	await sql`
+	const rows = await sql`
 		INSERT INTO expenses (telegram_user_id, amount, category_id, note, expense_date)
 		VALUES (${telegramUserId}, ${expense.amount}, ${categoryId}, ${expense.note}, ${expense.expenseDate})
+		RETURNING id
 	`;
+	return rows[0].id as number;
 }
 
 export async function fetchBiggestExpense(sql: Sql, telegramUserId: number, filter: string) {

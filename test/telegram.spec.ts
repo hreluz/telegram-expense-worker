@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { sendTelegramMessage, sendTelegramDocument, dropPendingUpdates, setTelegramCommands } from "../src/telegram";
+import { sendTelegramMessage, sendTelegramDocument, dropPendingUpdates, setTelegramCommands, answerCallbackQuery, editMessageReplyMarkup } from "../src/telegram";
 
 const mockFetch = vi.fn().mockResolvedValue(new Response());
 
@@ -29,6 +29,14 @@ describe("sendTelegramMessage", () => {
 
 		const [, options] = mockFetch.mock.calls[0];
 		expect(JSON.parse(options.body)).toEqual({ chat_id: 42, text: "<b>Hello!</b>", parse_mode: "HTML" });
+	});
+
+	it("includes reply_markup in the body when provided", async () => {
+		const replyMarkup = { inline_keyboard: [[{ text: "Undo", callback_data: "undo_1" }]] };
+		await sendTelegramMessage("mytoken", 42, "Saved!", undefined, replyMarkup);
+
+		const [, options] = mockFetch.mock.calls[0];
+		expect(JSON.parse(options.body)).toEqual({ chat_id: 42, text: "Saved!", reply_markup: replyMarkup });
 	});
 
 	it("throws when the Telegram API returns an error", async () => {
@@ -100,6 +108,67 @@ describe("setTelegramCommands", () => {
 		mockFetch.mockResolvedValue(new Response("Bad Request", { status: 400 }));
 
 		await expect(setTelegramCommands("mytoken")).rejects.toThrow("Telegram API error 400:");
+	});
+});
+
+describe("answerCallbackQuery", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockFetch.mockResolvedValue(new Response());
+	});
+
+	it("calls the answerCallbackQuery endpoint", async () => {
+		await answerCallbackQuery("mytoken", "cq_id_123");
+
+		const [url] = mockFetch.mock.calls[0];
+		expect(url).toBe("https://api.telegram.org/botmytoken/answerCallbackQuery");
+	});
+
+	it("sends callback_query_id in the body", async () => {
+		await answerCallbackQuery("mytoken", "cq_id_123");
+
+		const [, options] = mockFetch.mock.calls[0];
+		expect(JSON.parse(options.body)).toEqual({ callback_query_id: "cq_id_123" });
+	});
+
+	it("includes text when provided", async () => {
+		await answerCallbackQuery("mytoken", "cq_id_123", "Done!");
+
+		const [, options] = mockFetch.mock.calls[0];
+		expect(JSON.parse(options.body)).toEqual({ callback_query_id: "cq_id_123", text: "Done!" });
+	});
+
+	it("throws when the Telegram API returns an error", async () => {
+		mockFetch.mockResolvedValue(new Response("Bad Request", { status: 400 }));
+
+		await expect(answerCallbackQuery("mytoken", "cq_id_123")).rejects.toThrow("Telegram API error 400:");
+	});
+});
+
+describe("editMessageReplyMarkup", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockFetch.mockResolvedValue(new Response());
+	});
+
+	it("calls the editMessageReplyMarkup endpoint", async () => {
+		await editMessageReplyMarkup("mytoken", 42, 100, {});
+
+		const [url] = mockFetch.mock.calls[0];
+		expect(url).toBe("https://api.telegram.org/botmytoken/editMessageReplyMarkup");
+	});
+
+	it("sends chat_id, message_id, and reply_markup in the body", async () => {
+		await editMessageReplyMarkup("mytoken", 42, 100, {});
+
+		const [, options] = mockFetch.mock.calls[0];
+		expect(JSON.parse(options.body)).toEqual({ chat_id: 42, message_id: 100, reply_markup: {} });
+	});
+
+	it("throws when the Telegram API returns an error", async () => {
+		mockFetch.mockResolvedValue(new Response("Bad Request", { status: 400 }));
+
+		await expect(editMessageReplyMarkup("mytoken", 42, 100, {})).rejects.toThrow("Telegram API error 400:");
 	});
 });
 

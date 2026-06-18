@@ -2,12 +2,14 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import worker from "../src/index";
 
-const { mockSql, mockSendTelegramMessage, mockSendTelegramDocument, mockDropPendingUpdates, mockSetTelegramCommands } = vi.hoisted(() => ({
+const { mockSql, mockSendTelegramMessage, mockSendTelegramDocument, mockDropPendingUpdates, mockSetTelegramCommands, mockAnswerCallbackQuery, mockEditMessageReplyMarkup } = vi.hoisted(() => ({
 	mockSql: vi.fn().mockResolvedValue([]),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
 	mockSendTelegramDocument: vi.fn().mockResolvedValue(undefined),
 	mockDropPendingUpdates: vi.fn().mockResolvedValue(undefined),
 	mockSetTelegramCommands: vi.fn().mockResolvedValue(undefined),
+	mockAnswerCallbackQuery: vi.fn().mockResolvedValue(undefined),
+	mockEditMessageReplyMarkup: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@neondatabase/serverless", () => ({
@@ -19,6 +21,8 @@ vi.mock("../src/telegram", () => ({
 	sendTelegramDocument: mockSendTelegramDocument,
 	dropPendingUpdates: mockDropPendingUpdates,
 	setTelegramCommands: mockSetTelegramCommands,
+	answerCallbackQuery: mockAnswerCallbackQuery,
+	editMessageReplyMarkup: mockEditMessageReplyMarkup,
 }));
 
 const testEnv = { DATABASE_URL: "postgresql://test", TELEGRAM_TOKEN: "test-token" };
@@ -43,6 +47,42 @@ describe("telegram-expense-worker", () => {
 		mockSendTelegramMessage.mockResolvedValue(undefined);
 		mockSendTelegramDocument.mockResolvedValue(undefined);
 		mockSetTelegramCommands.mockResolvedValue(undefined);
+		mockAnswerCallbackQuery.mockResolvedValue(undefined);
+		mockEditMessageReplyMarkup.mockResolvedValue(undefined);
+	});
+
+	describe("callback_query routing", () => {
+		function telegramCallbackQuery(data: string, userId = 42, messageId = 100) {
+			return { callback_query: { id: 'cq_123', from: { id: userId }, message: { message_id: messageId, chat: { id: userId } }, data } };
+		}
+
+		it("routes undo callback to handleCallbackQuery and deletes the expense", async () => {
+			mockSql
+				.mockResolvedValueOnce([{ category_id: 7 }])  // DELETE RETURNING category_id
+				.mockResolvedValueOnce([{ count: 1 }]);         // SELECT COUNT remaining
+
+			const request = postRequest(telegramCallbackQuery('undo_10'));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+			expect(mockSendTelegramMessage).toHaveBeenCalledWith('test-token', 42, 'Expense #10 deleted.');
+			expect(mockAnswerCallbackQuery).toHaveBeenCalledWith('test-token', 'cq_123');
+			expect(mockEditMessageReplyMarkup).toHaveBeenCalledWith('test-token', 42, 100, {});
+		});
+
+		it("sends 'Expense not found.' when expense was already deleted", async () => {
+			mockSql.mockResolvedValueOnce([]);
+
+			const request = postRequest(telegramCallbackQuery('undo_99'));
+			const ctx = createExecutionContext();
+			await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(mockSendTelegramMessage).toHaveBeenCalledWith('test-token', 42, 'Expense not found.');
+		});
 	});
 
 	it("returns running message on non-POST request", async () => {
@@ -462,7 +502,9 @@ describe("telegram-expense-worker", () => {
 
 	describe("add expense", () => {
 		beforeEach(() => {
-			mockSql.mockResolvedValueOnce([{ id: 1 }]);
+			mockSql
+				.mockResolvedValueOnce([{ id: 1 }])   // upsertCategory
+				.mockResolvedValueOnce([{ id: 99 }]);  // INSERT RETURNING id
 		});
 
 		it("saves a valid expense", async () => {

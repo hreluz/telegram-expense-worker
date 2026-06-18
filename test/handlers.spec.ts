@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { handleReport, handleList, handleAddExpense, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, handleSearch, HELP_TEXT } from "../src/handlers";
+import { handleReport, handleList, handleAddExpense, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, handleSearch, handleCallbackQuery, HELP_TEXT } from "../src/handlers";
 import type { Sql } from "../src/types";
 
-const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockSaveLog, mockDeleteExpense, mockFetchBiggestExpense, mockDeleteLatestExpense, mockSetBudget, mockRemoveBudget, mockFetchBudgets, mockFetchBudgetForCategory, mockSearchExpenses, mockSendTelegramMessage, mockSendTelegramDocument } = vi.hoisted(() => ({
+const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockSaveLog, mockDeleteExpense, mockFetchBiggestExpense, mockDeleteLatestExpense, mockSetBudget, mockRemoveBudget, mockFetchBudgets, mockFetchBudgetForCategory, mockSearchExpenses, mockSendTelegramMessage, mockSendTelegramDocument, mockAnswerCallbackQuery, mockEditMessageReplyMarkup } = vi.hoisted(() => ({
 	mockFetchReport: vi.fn().mockResolvedValue([]),
 	mockFetchRecent: vi.fn().mockResolvedValue([]),
 	mockFetchCategoryTotals: vi.fn().mockResolvedValue([]),
@@ -18,6 +18,8 @@ const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpen
 	mockSearchExpenses: vi.fn().mockResolvedValue([]),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
 	mockSendTelegramDocument: vi.fn().mockResolvedValue(undefined),
+	mockAnswerCallbackQuery: vi.fn().mockResolvedValue(undefined),
+	mockEditMessageReplyMarkup: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/db", () => ({
@@ -39,6 +41,8 @@ vi.mock("../src/db", () => ({
 vi.mock("../src/telegram", () => ({
 	sendTelegramMessage: mockSendTelegramMessage,
 	sendTelegramDocument: mockSendTelegramDocument,
+	answerCallbackQuery: mockAnswerCallbackQuery,
+	editMessageReplyMarkup: mockEditMessageReplyMarkup,
 }));
 
 const sql = {} as unknown as Sql;
@@ -49,7 +53,7 @@ beforeEach(() => {
 	mockFetchReport.mockResolvedValue([]);
 	mockFetchRecent.mockResolvedValue([]);
 	mockFetchCategoryTotals.mockResolvedValue([]);
-	mockSaveExpense.mockResolvedValue(undefined);
+	mockSaveExpense.mockResolvedValue(99);
 	mockSaveLog.mockResolvedValue(undefined);
 	mockDeleteExpense.mockResolvedValue({ found: true, categoryDeleted: false });
 	mockFetchBiggestExpense.mockResolvedValue([]);
@@ -61,6 +65,8 @@ beforeEach(() => {
 	mockSearchExpenses.mockResolvedValue([]);
 	mockSendTelegramMessage.mockResolvedValue(undefined);
 	mockSendTelegramDocument.mockResolvedValue(undefined);
+	mockAnswerCallbackQuery.mockResolvedValue(undefined);
+	mockEditMessageReplyMarkup.mockResolvedValue(undefined);
 });
 
 describe("handleHelp", () => {
@@ -326,13 +332,23 @@ describe("handleAddExpense", () => {
 	it("sends a confirmation to the user via Telegram", async () => {
 		await handleAddExpense(sql, 42, "300 gym", token);
 
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, expect.stringMatching(/^Saved: 300 gym\nDate: \d{4}-\d{2}-\d{2}$/));
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(
+			token, 42,
+			expect.stringMatching(/^Saved: 300 gym\nDate: \d{4}-\d{2}-\d{2}$/),
+			undefined,
+			expect.objectContaining({ inline_keyboard: [[{ text: '🗑 Undo', callback_data: 'undo_99' }]] }),
+		);
 	});
 
 	it("includes note in confirmation when present", async () => {
 		await handleAddExpense(sql, 42, "300 gym bought shoes", token);
 
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, expect.stringMatching(/^Saved: 300 gym\nDate: \d{4}-\d{2}-\d{2}\nNote: bought shoes$/));
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(
+			token, 42,
+			expect.stringMatching(/^Saved: 300 gym\nDate: \d{4}-\d{2}-\d{2}\nNote: bought shoes$/),
+			undefined,
+			expect.objectContaining({ inline_keyboard: [[{ text: '🗑 Undo', callback_data: 'undo_99' }]] }),
+		);
 	});
 
 	it("returns 200 and logs when parsing fails", async () => {
@@ -695,5 +711,59 @@ describe("handleSearch", () => {
 		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "DB error");
+	});
+});
+
+const makeCallbackQuery = (data: string, userId = 42, messageId = 100) => ({
+	id: 'cq_123',
+	from: { id: userId },
+	message: { message_id: messageId, chat: { id: userId } },
+	data,
+});
+
+describe("handleCallbackQuery", () => {
+	it("deletes the expense and sends confirmation when undo button is tapped", async () => {
+		mockDeleteExpense.mockResolvedValue({ found: true, categoryDeleted: false });
+
+		const response = await handleCallbackQuery(sql, makeCallbackQuery('undo_10'), token);
+		const body = await response.json() as { ok: boolean };
+
+		expect(body.ok).toBe(true);
+		expect(mockDeleteExpense).toHaveBeenCalledWith(sql, 42, 10);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, 'Expense #10 deleted.');
+	});
+
+	it("sends 'Expense not found.' when the expense was already deleted", async () => {
+		mockDeleteExpense.mockResolvedValue({ found: false, categoryDeleted: false });
+
+		await handleCallbackQuery(sql, makeCallbackQuery('undo_10'), token);
+
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, 'Expense not found.');
+	});
+
+	it("answers the callback query and removes the keyboard after undo", async () => {
+		mockDeleteExpense.mockResolvedValue({ found: true, categoryDeleted: false });
+
+		await handleCallbackQuery(sql, makeCallbackQuery('undo_10'), token);
+
+		expect(mockAnswerCallbackQuery).toHaveBeenCalledWith(token, 'cq_123');
+		expect(mockEditMessageReplyMarkup).toHaveBeenCalledWith(token, 42, 100, {});
+	});
+
+	it("answers the callback query silently for unknown data", async () => {
+		await handleCallbackQuery(sql, makeCallbackQuery('unknown_action'), token);
+
+		expect(mockDeleteExpense).not.toHaveBeenCalled();
+		expect(mockAnswerCallbackQuery).toHaveBeenCalledWith(token, 'cq_123');
+	});
+
+	it("still answers the callback and removes keyboard when deleteExpense throws", async () => {
+		mockDeleteExpense.mockRejectedValue(new Error("DB error"));
+
+		await handleCallbackQuery(sql, makeCallbackQuery('undo_10'), token);
+
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
+		expect(mockAnswerCallbackQuery).toHaveBeenCalledWith(token, 'cq_123');
+		expect(mockEditMessageReplyMarkup).toHaveBeenCalledWith(token, 42, 100, {});
 	});
 });

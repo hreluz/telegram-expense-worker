@@ -10,6 +10,13 @@ export type TelegramBody = {
 	message?: {
 		text?: string;
 		from?: { id?: number };
+		message_id?: number;
+	};
+	callback_query?: {
+		id: string;
+		from: { id: number };
+		message?: { message_id: number; chat?: { id: number } };
+		data?: string;
 	};
 };
 

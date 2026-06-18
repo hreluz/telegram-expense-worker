@@ -42,7 +42,7 @@ src/db/expenses.ts        — fetchReport, fetchRecent, saveExpense, deleteExpen
 src/db/categories.ts      — fetchCategoryTotals
 src/db/logs.ts            — migrate, saveLog, fetchLogs
 src/db/budgets.ts         — setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory
-src/telegram.ts           — outbound API: sendTelegramMessage, dropPendingUpdates, setTelegramCommands
+src/telegram.ts           — outbound API: sendTelegramMessage, dropPendingUpdates, setTelegramCommands, answerCallbackQuery, editMessageReplyMarkup
 src/handlers/utils.ts     — shared helpers: trySend, validateFilter, parseExpense, HELP_TEXT, date utilities
 src/handlers/admin.ts     — handleMigrate, handleLogs, handleDropPending (imports from utils)
 src/handlers.ts           — expense handlers + barrel re-export of handlers/utils and handlers/admin
@@ -50,6 +50,8 @@ src/index.ts              — worker entry point: parse body, guard, dispatch to
 ```
 
 Each layer only imports from layers below it. `index.ts` knows about handlers; handlers know about `db` and `telegram`; neither knows about each other.
+
+`index.ts` handles two Telegram update types: `message` (text commands and expense entries) and `callback_query` (inline button taps). `callback_query` updates are routed to `handleCallbackQuery` before the text dispatch.
 
 ### Available commands
 

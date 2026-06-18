@@ -1,6 +1,6 @@
-import type { Sql } from './types';
+import type { Sql, TelegramBody } from './types';
 import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, saveLog, deleteExpense, fetchBiggestExpense, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses } from './db';
-import { sendTelegramMessage, sendTelegramDocument } from './telegram';
+import { sendTelegramMessage, sendTelegramDocument, answerCallbackQuery, editMessageReplyMarkup } from './telegram';
 import { HELP_TEXT, trySend, validateFilter, parseExpense, todayIso, prevMonth } from './handlers/utils';
 
 export { HELP_TEXT, parseExpense } from './handlers/utils';
@@ -303,7 +303,7 @@ export async function handleSearch(sql: Sql, telegramUserId: number, token: stri
 export async function handleAddExpense(sql: Sql, telegramUserId: number, text: string, token: string): Promise<Response> {
 	try {
 		const expense = parseExpense(text);
-		await saveExpense(sql, telegramUserId, expense);
+		const savedId = await saveExpense(sql, telegramUserId, expense);
 		const lines = [`Saved: ${expense.amount} ${expense.category}`, `Date: ${expense.expenseDate}`];
 		if (expense.note) lines.push(`Note: ${expense.note}`);
 
@@ -324,7 +324,8 @@ export async function handleAddExpense(sql: Sql, telegramUserId: number, text: s
 			// non-critical — skip warning on failure
 		}
 
-		await trySend(sql, token, telegramUserId, lines.join('\n'));
+		const replyMarkup = { inline_keyboard: [[{ text: '🗑 Undo', callback_data: `undo_${savedId}` }]] };
+		await trySend(sql, token, telegramUserId, lines.join('\n'), undefined, replyMarkup);
 		return Response.json({ ok: true, message: 'Saved', expense });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Invalid input';
@@ -332,4 +333,34 @@ export async function handleAddExpense(sql: Sql, telegramUserId: number, text: s
 		await trySend(sql, token, telegramUserId, message);
 		return Response.json({ ok: false, error: message });
 	}
+}
+
+export async function handleCallbackQuery(sql: Sql, callbackQuery: NonNullable<TelegramBody['callback_query']>, token: string): Promise<Response> {
+	const { id: callbackQueryId, from, message, data } = callbackQuery;
+	const telegramUserId = from.id;
+	const chatId = message?.chat?.id ?? telegramUserId;
+	const messageId = message?.message_id;
+
+	if (data?.startsWith('undo_')) {
+		const expenseId = parseInt(data.slice(5), 10);
+		try {
+			const result = await deleteExpense(sql, telegramUserId, expenseId);
+			const msg = result.found ? `Expense #${expenseId} deleted.` : 'Expense not found.';
+			await trySend(sql, token, chatId, msg);
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : 'Unknown error';
+			await saveLog(sql, telegramUserId, msg);
+			await trySend(sql, token, chatId, msg);
+		}
+	}
+
+	// Always answer and clean up buttons (best-effort)
+	try {
+		await answerCallbackQuery(token, callbackQueryId);
+		if (messageId) await editMessageReplyMarkup(token, chatId, messageId, {});
+	} catch {
+		// non-critical
+	}
+
+	return Response.json({ ok: true });
 }

@@ -1,6 +1,7 @@
-export async function sendTelegramMessage(token: string, chatId: number, text: string, parseMode?: string) {
+export async function sendTelegramMessage(token: string, chatId: number, text: string, parseMode?: string, replyMarkup?: Record<string, unknown>) {
 	const body: Record<string, unknown> = { chat_id: chatId, text };
 	if (parseMode) body.parse_mode = parseMode;
+	if (replyMarkup) body.reply_markup = replyMarkup;
 	const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
@@ -41,6 +42,32 @@ export async function sendTelegramDocument(token: string, chatId: number, filena
 	const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
 		method: 'POST',
 		body: form,
+	});
+	if (!res.ok) {
+		const error = await res.text();
+		throw new Error(`Telegram API error ${res.status}: ${error}`);
+	}
+}
+
+export async function answerCallbackQuery(token: string, callbackQueryId: string, text?: string) {
+	const body: Record<string, unknown> = { callback_query_id: callbackQueryId };
+	if (text) body.text = text;
+	const res = await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body),
+	});
+	if (!res.ok) {
+		const error = await res.text();
+		throw new Error(`Telegram API error ${res.status}: ${error}`);
+	}
+}
+
+export async function editMessageReplyMarkup(token: string, chatId: number, messageId: number, replyMarkup: Record<string, unknown>) {
+	const res = await fetch(`https://api.telegram.org/bot${token}/editMessageReplyMarkup`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: replyMarkup }),
 	});
 	if (!res.ok) {
 		const error = await res.text();
