@@ -42,6 +42,14 @@ ID    Date        Amount    Category      Note
 #40   2026-06-10  12.00     coffee
 ```
 
+**Search expenses** — send `/search <keyword>` to find expenses where the category name or note contains the keyword. The search is case-insensitive and returns all matching entries across all time, formatted the same way as `/list`.
+
+```
+/search gym              # all expenses in the gym category
+/search shoes            # all expenses with "shoes" in the note
+/search weekly           # all expenses with "weekly" in the note
+```
+
 **Export expenses as CSV** — send `/report` to receive your full history as a `.csv` file. Add a date filter to scope the export. Use `categories` to export totals grouped by category instead:
 
 ```

@@ -38,7 +38,7 @@ This is a Cloudflare Worker acting as a Telegram bot webhook. Telegram POSTs upd
 ```
 src/types.ts              — shared types: Env, TelegramBody, Expense, Sql
 src/db.ts                 — barrel re-export of src/db/*
-src/db/expenses.ts        — fetchReport, fetchRecent, saveExpense, deleteExpense, deleteLatestExpense, fetchBiggestExpense
+src/db/expenses.ts        — fetchReport, fetchRecent, saveExpense, deleteExpense, deleteLatestExpense, fetchBiggestExpense, searchExpenses
 src/db/categories.ts      — fetchCategoryTotals
 src/db/logs.ts            — migrate, saveLog, fetchLogs
 src/db/budgets.ts         — setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory
@@ -57,6 +57,7 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 - `/list [categories|expenses] [filter]` — last 10 expenses with IDs and a header row (default view `expenses`); with a date filter (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`) returns all matching expenses with no limit. With `categories` view, returns per-category totals as a text message instead.
 - `/report [categories|expenses] [filter]` — full history as a `.csv` file attachment; same date filter syntax scopes the export. With `categories` view, sends category totals CSV (e.g. `categories-2026-05.csv`); with `expenses` view, names the file `expenses-2026-05.csv`.
 - `/budget <category> <amount>` — set a monthly budget for a category (upsert). `/budget <category> off` removes it. `/budget` with no args lists all budgets. Stored by category name in the `budgets` table so budgets can be set before any expenses exist.
+- `/search <keyword>` — case-insensitive substring search across category name and note fields; returns all matching expenses (no limit) formatted like `/list`.
 - `/undo` — delete the most recently added expense (scoped to the current user). Same orphan-category cleanup as `/delete`.
 - `/delete <id>` — delete an expense by ID (scoped to the current user). If the deleted expense was the last one in its category, the category is auto-deleted too.
 - `/summary` — spending snapshot for the current month: total, vs. last month (with % change), top 3 categories, and biggest single expense. Uses `fetchCategoryTotals` (twice — current and previous month) and `fetchBiggestExpense` from `db.ts`.

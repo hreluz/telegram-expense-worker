@@ -73,6 +73,18 @@ export async function fetchBiggestExpense(sql: Sql, telegramUserId: number, filt
 	`;
 }
 
+export async function searchExpenses(sql: Sql, telegramUserId: number, keyword: string) {
+	const pattern = `%${keyword}%`;
+	return sql`
+		SELECT e.id, e.amount, c.name AS category, e.note, e.expense_date::text AS expense_date
+		FROM expenses e
+		JOIN categories c ON c.id = e.category_id
+		WHERE e.telegram_user_id = ${telegramUserId}
+			AND (c.name ILIKE ${pattern} OR e.note ILIKE ${pattern})
+		ORDER BY e.expense_date DESC, e.created_at DESC
+	`;
+}
+
 export async function deleteExpense(sql: Sql, telegramUserId: number, id: number): Promise<{ found: boolean; categoryDeleted: boolean }> {
 	const deleted = await sql`
 		DELETE FROM expenses

@@ -14,6 +14,7 @@ Format: <code>&lt;amount&gt; &lt;category&gt; [@YYYY-MM-DD] [note]</code>
 📋 <b>View</b>
 <code>/list</code> — last 10 expenses
 <code>/list 2026-05</code> — filter by year, month, or day
+<code>/search gym</code> — find expenses by category or note
 <code>/report</code> — export full history as CSV
 <code>/summary</code> — monthly spending snapshot
 

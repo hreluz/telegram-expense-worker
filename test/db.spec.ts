@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory } from "../src/db";
+import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses } from "../src/db";
 import type { Sql } from "../src/types";
 
 describe("db", () => {
@@ -282,6 +282,32 @@ describe("db", () => {
 
 			expect(result).toEqual([]);
 			expect(mockSql).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("searchExpenses", () => {
+		it("returns matching rows from sql", async () => {
+			const rows = [{ id: 1, amount: 300, category: "gym", note: "bought shoes", expense_date: "2026-06-10" }];
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue(rows);
+
+			const result = await searchExpenses(mockSql, 42, "gym");
+
+			expect(result).toEqual(rows);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("returns empty array when no expenses match", async () => {
+			const result = await searchExpenses(mockSql, 42, "xyz");
+
+			expect(result).toEqual([]);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("uses ILIKE for case-insensitive matching", async () => {
+			await searchExpenses(mockSql, 42, "GYM");
+
+			const sqlStrings = (mockSql as ReturnType<typeof vi.fn>).mock.calls[0][0] as string[];
+			expect(sqlStrings.join("")).toContain("ILIKE");
 		});
 	});
 

@@ -15,6 +15,7 @@ export async function sendTelegramMessage(token: string, chatId: number, text: s
 export async function setTelegramCommands(token: string) {
 	const commands = [
 		{ command: 'list', description: 'Last 10 expenses (or /list 2026-05 to filter)' },
+		{ command: 'search', description: 'Find expenses by keyword (category or note)' },
 		{ command: 'report', description: 'Export expenses as CSV (or /report 2026-05 to filter)' },
 		{ command: 'delete', description: 'Delete an expense by ID' },
 		{ command: 'undo', description: 'Delete the most recently added expense' },

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { handleReport, handleList, handleAddExpense, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, HELP_TEXT } from "../src/handlers";
+import { handleReport, handleList, handleAddExpense, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, handleSearch, HELP_TEXT } from "../src/handlers";
 import type { Sql } from "../src/types";
 
-const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockSaveLog, mockDeleteExpense, mockFetchBiggestExpense, mockDeleteLatestExpense, mockSetBudget, mockRemoveBudget, mockFetchBudgets, mockFetchBudgetForCategory, mockSendTelegramMessage, mockSendTelegramDocument } = vi.hoisted(() => ({
+const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockSaveLog, mockDeleteExpense, mockFetchBiggestExpense, mockDeleteLatestExpense, mockSetBudget, mockRemoveBudget, mockFetchBudgets, mockFetchBudgetForCategory, mockSearchExpenses, mockSendTelegramMessage, mockSendTelegramDocument } = vi.hoisted(() => ({
 	mockFetchReport: vi.fn().mockResolvedValue([]),
 	mockFetchRecent: vi.fn().mockResolvedValue([]),
 	mockFetchCategoryTotals: vi.fn().mockResolvedValue([]),
@@ -15,6 +15,7 @@ const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpen
 	mockRemoveBudget: vi.fn().mockResolvedValue(true),
 	mockFetchBudgets: vi.fn().mockResolvedValue([]),
 	mockFetchBudgetForCategory: vi.fn().mockResolvedValue([]),
+	mockSearchExpenses: vi.fn().mockResolvedValue([]),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
 	mockSendTelegramDocument: vi.fn().mockResolvedValue(undefined),
 }));
@@ -32,6 +33,7 @@ vi.mock("../src/db", () => ({
 	removeBudget: mockRemoveBudget,
 	fetchBudgets: mockFetchBudgets,
 	fetchBudgetForCategory: mockFetchBudgetForCategory,
+	searchExpenses: mockSearchExpenses,
 }));
 
 vi.mock("../src/telegram", () => ({
@@ -56,6 +58,7 @@ beforeEach(() => {
 	mockRemoveBudget.mockResolvedValue(true);
 	mockFetchBudgets.mockResolvedValue([]);
 	mockFetchBudgetForCategory.mockResolvedValue([]);
+	mockSearchExpenses.mockResolvedValue([]);
 	mockSendTelegramMessage.mockResolvedValue(undefined);
 	mockSendTelegramDocument.mockResolvedValue(undefined);
 });
@@ -633,6 +636,61 @@ describe("handleBudget", () => {
 		mockSetBudget.mockRejectedValue(new Error("DB error"));
 
 		const response = await handleBudget(sql, 42, token, "gym 500");
+
+		expect(response.status).toBe(200);
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "DB error");
+	});
+});
+
+describe("handleSearch", () => {
+	it("returns 200 and sends usage hint when keyword is missing", async () => {
+		const response = await handleSearch(sql, 42, token, "");
+
+		expect(response.status).toBe(200);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Use: /search <keyword>");
+		expect(mockSearchExpenses).not.toHaveBeenCalled();
+	});
+
+	it("sends 'no expenses found' message when there are no matches", async () => {
+		mockSearchExpenses.mockResolvedValue([]);
+
+		await handleSearch(sql, 42, token, "xyz");
+
+		expect(mockSearchExpenses).toHaveBeenCalledWith(sql, 42, "xyz");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, 'No expenses found for "xyz".');
+	});
+
+	it("sends formatted table with matching expenses", async () => {
+		mockSearchExpenses.mockResolvedValue([
+			{ id: 1, amount: 300, category: "gym", note: "bought shoes", expense_date: "2026-06-10" },
+			{ id: 2, amount: 50, category: "gym", note: null, expense_date: "2026-06-01" },
+		]);
+
+		await handleSearch(sql, 42, token, "gym");
+
+		const sent = mockSendTelegramMessage.mock.calls[0][2] as string;
+		expect(sent).toContain("#1");
+		expect(sent).toContain("gym");
+		expect(sent).toContain("bought shoes");
+		expect(sent).toContain("ID    Date        Amount    Category      Note");
+	});
+
+	it("returns the matched rows in the response body", async () => {
+		const rows = [{ id: 1, amount: 300, category: "gym", note: "", expense_date: "2026-06-10" }];
+		mockSearchExpenses.mockResolvedValue(rows);
+
+		const response = await handleSearch(sql, 42, token, "gym");
+		const body = await response.json() as { ok: boolean; rows: unknown[] };
+
+		expect(body.ok).toBe(true);
+		expect(body.rows).toEqual(rows);
+	});
+
+	it("returns 200 and logs when searchExpenses throws", async () => {
+		mockSearchExpenses.mockRejectedValue(new Error("DB error"));
+
+		const response = await handleSearch(sql, 42, token, "gym");
 
 		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
