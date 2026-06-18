@@ -72,7 +72,7 @@ export async function fetchRecent(sql: Sql, telegramUserId: number, filter?: str
 	if (filter) {
 		const pattern = `${filter}%`;
 		return sql`
-			SELECT e.amount, c.name AS category, e.note, e.expense_date::text AS expense_date, e.created_at
+			SELECT e.id, e.amount, c.name AS category, e.note, e.expense_date::text AS expense_date, e.created_at
 			FROM expenses e
 			JOIN categories c ON c.id = e.category_id
 			WHERE e.telegram_user_id = ${telegramUserId}
@@ -81,7 +81,7 @@ export async function fetchRecent(sql: Sql, telegramUserId: number, filter?: str
 		`;
 	}
 	return sql`
-		SELECT e.amount, c.name AS category, e.note, e.expense_date::text AS expense_date, e.created_at
+		SELECT e.id, e.amount, c.name AS category, e.note, e.expense_date::text AS expense_date, e.created_at
 		FROM expenses e
 		JOIN categories c ON c.id = e.category_id
 		WHERE e.telegram_user_id = ${telegramUserId}
@@ -128,4 +128,28 @@ export async function saveExpense(sql: Sql, telegramUserId: number, expense: Exp
 		INSERT INTO expenses (telegram_user_id, amount, category_id, note, expense_date)
 		VALUES (${telegramUserId}, ${expense.amount}, ${categoryId}, ${expense.note}, ${expense.expenseDate})
 	`;
+}
+
+export async function deleteExpense(sql: Sql, telegramUserId: number, id: number): Promise<{ found: boolean; categoryDeleted: boolean }> {
+	const deleted = await sql`
+		DELETE FROM expenses
+		WHERE id = ${id} AND telegram_user_id = ${telegramUserId}
+		RETURNING category_id
+	`;
+
+	if (deleted.length === 0) {
+		return { found: false, categoryDeleted: false };
+	}
+
+	const categoryId = deleted[0].category_id as number;
+	const remaining = await sql`
+		SELECT COUNT(*)::int AS count FROM expenses WHERE category_id = ${categoryId}
+	`;
+
+	if ((remaining[0].count as number) === 0) {
+		await sql`DELETE FROM categories WHERE id = ${categoryId}`;
+		return { found: true, categoryDeleted: true };
+	}
+
+	return { found: true, categoryDeleted: false };
 }

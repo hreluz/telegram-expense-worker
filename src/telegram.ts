@@ -14,6 +14,7 @@ export async function setTelegramCommands(token: string) {
 	const commands = [
 		{ command: 'list', description: 'Last 10 expenses (or /list 2026-05 to filter)' },
 		{ command: 'report', description: 'Export expenses as CSV (or /report 2026-05 to filter)' },
+		{ command: 'delete', description: 'Delete an expense by ID' },
 		{ command: 'help', description: 'Show commands and examples' },
 	];
 	const res = await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {

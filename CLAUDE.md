@@ -48,8 +48,9 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 ### Available commands
 
 - `/start`, `/help` — send `HELP_TEXT` (format, examples, command list); `/start` is the entry point for new users
-- `/list [categories|expenses] [filter]` — last 10 expenses (default view `expenses`); with a date filter (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`) returns all matching expenses with no limit. With `categories` view, returns per-category totals as a text message instead.
+- `/list [categories|expenses] [filter]` — last 10 expenses with IDs and a header row (default view `expenses`); with a date filter (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`) returns all matching expenses with no limit. With `categories` view, returns per-category totals as a text message instead.
 - `/report [categories|expenses] [filter]` — full history as a `.csv` file attachment; same date filter syntax scopes the export. With `categories` view, sends category totals CSV (e.g. `categories-2026-05.csv`); with `expenses` view, names the file `expenses-2026-05.csv`.
+- `/delete <id>` — delete an expense by ID (scoped to the current user). If the deleted expense was the last one in its category, the category is auto-deleted too.
 - `/migrate` — create DB tables + register bot commands menu via `setTelegramCommands` (admin only)
 - `/logs` — last 10 error log entries (admin only)
 - `/droppending` — flush Telegram's webhook retry queue (admin only)
@@ -138,6 +139,15 @@ curl -X POST http://localhost:8787 \
 ```
 
 To test the full Telegram reply flow, expose the local server with `cloudflared tunnel --url http://localhost:8787` and register the tunnel URL as the bot webhook.
+
+## HTTP response status
+
+**Always return 200** for anything the handler processed — including user errors (bad input, not found, unauthorized, invalid command). Telegram retries any non-200 response, which causes the bot to send duplicate messages to the user in a loop.
+
+Only return a non-200 status for genuine infrastructure failures where a retry is actually useful:
+- **500** — database is down, Telegram API unreachable, or other server-side failures
+
+Never use 400, 403, or 404 in handlers. User-facing errors belong in the Telegram message text, not in the HTTP status.
 
 ## Code style
 
