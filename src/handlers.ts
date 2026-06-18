@@ -1,5 +1,5 @@
 import type { Sql, Expense } from "./types";
-import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense } from "./db";
+import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense } from "./db";
 import { sendTelegramMessage, sendTelegramDocument, dropPendingUpdates, setTelegramCommands } from "./telegram";
 
 export const HELP_TEXT = `Expense Tracker Bot
@@ -22,6 +22,7 @@ Commands:
   /report categories           — category totals as CSV
   /report categories 2026-05   — category totals CSV for a period
   /delete <id>                 — delete an expense by ID
+  /summary                     — spending snapshot for the current month
   /help                        — show this message
 
 Date filter format: YYYY, YYYY-MM, or YYYY-MM-DD`;
@@ -62,15 +63,23 @@ function todayIso(): string {
 export function parseExpense(text: string): Expense {
 	const parts = text.trim().split(/\s+/);
 
+	const FORMAT_HINT = `Format: <amount> <category> [@YYYY-MM-DD] [note]
+
+Examples:
+  300 gym
+  45.50 groceries weekly shopping
+  300 gym @2026-06-10
+  300 gym @2026-06-10 bought shoes`;
+
 	if (parts.length < 2) {
-		throw new Error("Use format: 300 gym");
+		throw new Error(FORMAT_HINT);
 	}
 
 	const amount = Number(parts[0]);
 	const category = parts[1].toLowerCase();
 
 	if (Number.isNaN(amount) || amount <= 0) {
-		throw new Error("Amount must be a valid number");
+		throw new Error(FORMAT_HINT);
 	}
 
 	const trailing = parts.slice(2);
@@ -253,6 +262,66 @@ export async function handleDelete(sql: Sql, telegramUserId: number, token: stri
 			return Response.json({ ok: false, error: 'Expense not found' });
 		}
 		await trySend(sql, token, telegramUserId, `Deleted expense #${id}.`);
+		return Response.json({ ok: true });
+	} catch (error) {
+		const message = error instanceof Error ? error.message : 'Unknown error';
+		await saveLog(sql, telegramUserId, message);
+		await trySend(sql, token, telegramUserId, 'Something went wrong.');
+		return Response.json({ ok: false, error: message }, { status: 500 });
+	}
+}
+
+function prevMonth(m: string): string {
+	const [y, mo] = m.split('-').map(Number);
+	return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}`;
+}
+
+export async function handleSummary(sql: Sql, telegramUserId: number, token: string): Promise<Response> {
+	const currentMonth = todayIso().slice(0, 7);
+	const monthLabel = new Date(currentMonth + '-02').toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+	try {
+		const thisRows = await fetchCategoryTotals(sql, telegramUserId, currentMonth);
+
+		if (thisRows.length === 0) {
+			await trySend(sql, token, telegramUserId, `No expenses recorded for ${monthLabel}.`);
+			return Response.json({ ok: true });
+		}
+
+		const thisTotal = thisRows.reduce((s, r) => s + Number(r.total), 0);
+		const top3 = thisRows.slice(0, 3);
+
+		const lastRows = await fetchCategoryTotals(sql, telegramUserId, prevMonth(currentMonth));
+		const lastTotal = lastRows.reduce((s, r) => s + Number(r.total), 0);
+
+		const biggestRows = await fetchBiggestExpense(sql, telegramUserId, currentMonth);
+		const biggest = biggestRows[0];
+
+		const lines: string[] = [`${monthLabel} Summary`, ''];
+
+		lines.push(`Total spent:  ${thisTotal.toFixed(2)}`);
+		if (lastTotal > 0) {
+			const diff = thisTotal - lastTotal;
+			const pct = Math.round((diff / lastTotal) * 100);
+			const sign = diff >= 0 ? '+' : '';
+			const change = pct === 0 ? '(no change)' : `(${sign}${pct}%)`;
+			lines.push(`Last month:   ${lastTotal.toFixed(2)}  ${change}`);
+		}
+
+		lines.push('');
+		lines.push('Top categories:');
+		for (const r of top3) {
+			lines.push(`  ${String(r.category).padEnd(16)}${Number(r.total).toFixed(2)}`);
+		}
+
+		if (biggest) {
+			lines.push('');
+			lines.push('Biggest expense:');
+			const notePart = biggest.note ? `  ${biggest.note}` : '';
+			lines.push(`  #${biggest.id}  ${Number(biggest.amount).toFixed(2)}  ${biggest.category}${notePart}  (${biggest.expense_date})`);
+		}
+
+		await trySend(sql, token, telegramUserId, lines.join('\n'));
 		return Response.json({ ok: true });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';

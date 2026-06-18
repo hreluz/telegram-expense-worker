@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseExpense, handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, handleDelete, HELP_TEXT } from "../src/handlers";
+import { parseExpense, handleReport, handleList, handleAddExpense, handleMigrate, handleLogs, handleDropPending, handleHelp, handleDelete, handleSummary, HELP_TEXT } from "../src/handlers";
 import type { Sql } from "../src/types";
 
-const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockMigrate, mockSaveLog, mockFetchLogs, mockDeleteExpense, mockSendTelegramMessage, mockSendTelegramDocument, mockDropPendingUpdates, mockSetTelegramCommands } = vi.hoisted(() => ({
+const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockMigrate, mockSaveLog, mockFetchLogs, mockDeleteExpense, mockFetchBiggestExpense, mockSendTelegramMessage, mockSendTelegramDocument, mockDropPendingUpdates, mockSetTelegramCommands } = vi.hoisted(() => ({
 	mockFetchReport: vi.fn().mockResolvedValue([]),
 	mockFetchRecent: vi.fn().mockResolvedValue([]),
 	mockFetchCategoryTotals: vi.fn().mockResolvedValue([]),
@@ -11,6 +11,7 @@ const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpen
 	mockSaveLog: vi.fn().mockResolvedValue(undefined),
 	mockFetchLogs: vi.fn().mockResolvedValue([]),
 	mockDeleteExpense: vi.fn().mockResolvedValue({ found: true, categoryDeleted: false }),
+	mockFetchBiggestExpense: vi.fn().mockResolvedValue([]),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
 	mockSendTelegramDocument: vi.fn().mockResolvedValue(undefined),
 	mockDropPendingUpdates: vi.fn().mockResolvedValue(undefined),
@@ -26,6 +27,7 @@ vi.mock("../src/db", () => ({
 	saveLog: mockSaveLog,
 	fetchLogs: mockFetchLogs,
 	deleteExpense: mockDeleteExpense,
+	fetchBiggestExpense: mockFetchBiggestExpense,
 }));
 
 vi.mock("../src/telegram", () => ({
@@ -48,6 +50,7 @@ beforeEach(() => {
 	mockSaveLog.mockResolvedValue(undefined);
 	mockFetchLogs.mockResolvedValue([]);
 	mockDeleteExpense.mockResolvedValue({ found: true, categoryDeleted: false });
+	mockFetchBiggestExpense.mockResolvedValue([]);
 	mockSendTelegramMessage.mockResolvedValue(undefined);
 	mockSendTelegramDocument.mockResolvedValue(undefined);
 	mockDropPendingUpdates.mockResolvedValue(undefined);
@@ -72,19 +75,19 @@ describe("parseExpense", () => {
 	});
 
 	it("throws when category is missing", () => {
-		expect(() => parseExpense("300")).toThrow("Use format: 300 gym");
+		expect(() => parseExpense("300")).toThrow("Format:");
 	});
 
 	it("throws when amount is not a number", () => {
-		expect(() => parseExpense("abc gym")).toThrow("Amount must be a valid number");
+		expect(() => parseExpense("abc gym")).toThrow("Format:");
 	});
 
 	it("throws when amount is zero", () => {
-		expect(() => parseExpense("0 gym")).toThrow("Amount must be a valid number");
+		expect(() => parseExpense("0 gym")).toThrow("Format:");
 	});
 
 	it("throws when amount is negative", () => {
-		expect(() => parseExpense("-10 gym")).toThrow("Amount must be a valid number");
+		expect(() => parseExpense("-10 gym")).toThrow("Format:");
 	});
 
 	it("lowercases the category", () => {
@@ -498,14 +501,14 @@ describe("handleAddExpense", () => {
 		expect(response.status).toBe(200);
 		const body = await response.json() as { ok: boolean; error: string };
 		expect(body.ok).toBe(false);
-		expect(body.error).toBe("Use format: 300 gym");
-		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "Use format: 300 gym");
+		expect((body.error as string)).toContain("Format:");
+		expect((mockSaveLog.mock.calls[0][2] as string)).toContain("Format:");
 	});
 
-	it("sends the error message to the user via Telegram on failure", async () => {
+	it("sends the format hint to the user via Telegram on failure", async () => {
 		await handleAddExpense(sql, 42, "300", token);
 
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Use format: 300 gym");
+		expect((mockSendTelegramMessage.mock.calls[0][2] as string)).toContain("Format:");
 	});
 
 	it("returns 200 and logs when the db throws", async () => {
@@ -599,6 +602,83 @@ describe("handleDelete", () => {
 
 		expect(response.status).toBe(500);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+	});
+});
+
+describe("handleSummary", () => {
+	it("sends 'no expenses' message when there are no expenses this month", async () => {
+		mockFetchCategoryTotals.mockResolvedValue([]);
+
+		const response = await handleSummary(sql, 42, token);
+		const body = await response.json() as { ok: boolean };
+
+		expect(body.ok).toBe(true);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, expect.stringContaining("No expenses recorded for"));
+		expect(mockFetchBiggestExpense).not.toHaveBeenCalled();
+	});
+
+	it("sends full summary with top categories, totals, and biggest expense", async () => {
+		mockFetchCategoryTotals
+			.mockResolvedValueOnce([
+				{ category: "gym", total: "450.00" },
+				{ category: "groceries", total: "380.00" },
+				{ category: "coffee", total: "120.00" },
+			])
+			.mockResolvedValueOnce([{ category: "gym", total: "930.00" }]);
+		mockFetchBiggestExpense.mockResolvedValue([
+			{ id: 42, amount: "300.00", category: "gym", note: "bought shoes", expense_date: "2026-06-10" },
+		]);
+
+		const response = await handleSummary(sql, 42, token);
+		const body = await response.json() as { ok: boolean };
+
+		expect(body.ok).toBe(true);
+		const sent = mockSendTelegramMessage.mock.calls[0][2] as string;
+		expect(sent).toContain("Total spent:");
+		expect(sent).toContain("Last month:");
+		expect(sent).toContain("gym");
+		expect(sent).toContain("groceries");
+		expect(sent).toContain("Biggest expense:");
+		expect(sent).toContain("#42");
+		expect(sent).toContain("bought shoes");
+	});
+
+	it("omits 'Last month' line when last month has no expenses", async () => {
+		mockFetchCategoryTotals
+			.mockResolvedValueOnce([{ category: "gym", total: "300.00" }])
+			.mockResolvedValueOnce([]);
+		mockFetchBiggestExpense.mockResolvedValue([
+			{ id: 1, amount: "300.00", category: "gym", note: "", expense_date: "2026-06-01" },
+		]);
+
+		await handleSummary(sql, 42, token);
+
+		const sent = mockSendTelegramMessage.mock.calls[0][2] as string;
+		expect(sent).not.toContain("Last month:");
+	});
+
+	it("omits note from biggest expense when note is empty", async () => {
+		mockFetchCategoryTotals
+			.mockResolvedValueOnce([{ category: "gym", total: "300.00" }])
+			.mockResolvedValueOnce([]);
+		mockFetchBiggestExpense.mockResolvedValue([
+			{ id: 1, amount: "300.00", category: "gym", note: "", expense_date: "2026-06-01" },
+		]);
+
+		await handleSummary(sql, 42, token);
+
+		const sent = mockSendTelegramMessage.mock.calls[0][2] as string;
+		expect(sent).toContain("#1  300.00  gym  (2026-06-01)");
+	});
+
+	it("logs error and sends generic message when db throws", async () => {
+		mockFetchCategoryTotals.mockRejectedValue(new Error("DB down"));
+
+		const response = await handleSummary(sql, 42, token);
+
+		expect(response.status).toBe(500);
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB down");
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
 	});
 });

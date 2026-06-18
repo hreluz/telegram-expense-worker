@@ -51,6 +51,7 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 - `/list [categories|expenses] [filter]` — last 10 expenses with IDs and a header row (default view `expenses`); with a date filter (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`) returns all matching expenses with no limit. With `categories` view, returns per-category totals as a text message instead.
 - `/report [categories|expenses] [filter]` — full history as a `.csv` file attachment; same date filter syntax scopes the export. With `categories` view, sends category totals CSV (e.g. `categories-2026-05.csv`); with `expenses` view, names the file `expenses-2026-05.csv`.
 - `/delete <id>` — delete an expense by ID (scoped to the current user). If the deleted expense was the last one in its category, the category is auto-deleted too.
+- `/summary` — spending snapshot for the current month: total, vs. last month (with % change), top 3 categories, and biggest single expense. Uses `fetchCategoryTotals` (twice — current and previous month) and `fetchBiggestExpense` from `db.ts`.
 - `/migrate` — create DB tables + register bot commands menu via `setTelegramCommands` (admin only)
 - `/logs` — last 10 error log entries (admin only)
 - `/droppending` — flush Telegram's webhook retry queue (admin only)

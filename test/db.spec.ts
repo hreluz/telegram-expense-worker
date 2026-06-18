@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense } from "../src/db";
+import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense } from "../src/db";
 import type { Sql } from "../src/types";
 
 describe("db", () => {
@@ -133,6 +133,25 @@ describe("db", () => {
 			const result = await fetchLogs(mockSql, 42);
 
 			expect(result).toEqual(rows);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("fetchBiggestExpense", () => {
+		it("returns the row from sql", async () => {
+			const rows = [{ id: 42, amount: 300, category: "gym", note: "bought shoes", expense_date: "2026-06-10" }];
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue(rows);
+
+			const result = await fetchBiggestExpense(mockSql, 42, "2026-06");
+
+			expect(result).toEqual(rows);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("returns empty array when no expenses match the filter", async () => {
+			const result = await fetchBiggestExpense(mockSql, 42, "2026-06");
+
+			expect(result).toEqual([]);
 			expect(mockSql).toHaveBeenCalledOnce();
 		});
 	});

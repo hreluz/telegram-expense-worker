@@ -53,6 +53,8 @@ ID    Date        Amount    Category      Note
 /report categories 2026-05     # category totals, May   →  categories-2026-05.csv
 ```
 
+**Get a spending summary** — send `/summary` to see a snapshot of the current month: total spent, comparison to last month, top 3 categories, and the single biggest expense.
+
 **Delete an expense** — send `/delete <id>` to remove an entry by its ID (shown in `/list`). If the deleted expense was the last one in its category, the category is removed automatically.
 
 ```

@@ -341,6 +341,19 @@ describe("telegram-expense-worker", () => {
 		});
 	});
 
+	describe("/summary", () => {
+		it("returns ok", async () => {
+			const request = postRequest(telegramMessage("/summary"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+			expect(mockSendTelegramMessage).toHaveBeenCalledOnce();
+		});
+	});
+
 	describe("/delete", () => {
 		it("deletes an expense and returns ok", async () => {
 			mockSql
@@ -436,7 +449,7 @@ describe("telegram-expense-worker", () => {
 			expect(response.status).toBe(200);
 			const body = await response.json() as { ok: boolean; error: string };
 			expect(body.ok).toBe(false);
-			expect(body.error).toBe("Use format: 300 gym");
+			expect((body.error as string)).toContain("Format:");
 		});
 
 		it("returns 400 when amount is not a number", async () => {
@@ -447,7 +460,7 @@ describe("telegram-expense-worker", () => {
 
 			expect(response.status).toBe(200);
 			const body = await response.json() as { error: string };
-			expect(body.error).toBe("Amount must be a valid number");
+			expect((body.error as string)).toContain("Format:");
 		});
 
 		it("returns 400 when amount is zero", async () => {
