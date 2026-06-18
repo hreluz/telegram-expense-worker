@@ -1,5 +1,5 @@
 import type { Sql, TelegramBody } from './types';
-import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, saveLog, deleteExpense, fetchBiggestExpense, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses, renameCategory } from './db';
+import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, saveLog, deleteExpense, fetchBiggestExpense, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses, renameCategory, fetchTopExpenses } from './db';
 import { sendTelegramMessage, sendTelegramDocument, answerCallbackQuery, editMessageReplyMarkup } from './telegram';
 import { HELP_TEXT, trySend, validateFilter, parseExpense, todayIso, prevMonth } from './handlers/utils';
 
@@ -291,6 +291,49 @@ export async function handleSearch(sql: Sql, telegramUserId: number, token: stri
 			text = `No expenses found for "${keyword}".`;
 		}
 		await sendTelegramMessage(token, telegramUserId, text);
+		return Response.json({ ok: true, rows });
+	} catch (error) {
+		const message = error instanceof Error ? error.message : 'Unknown error';
+		await saveLog(sql, telegramUserId, message);
+		await trySend(sql, token, telegramUserId, message);
+		return Response.json({ ok: false, error: message });
+	}
+}
+
+export async function handleTop(sql: Sql, telegramUserId: number, token: string, args: string): Promise<Response> {
+	const parts = args.split(/\s+/).filter(Boolean);
+	let limit = 10;
+	let filter: string | undefined;
+
+	if (parts.length > 0) {
+		if (/^\d+$/.test(parts[0])) {
+			limit = Math.max(1, parseInt(parts[0], 10));
+			filter = parts[1];
+		} else {
+			filter = parts[0];
+		}
+	}
+
+	const invalid = await validateFilter(sql, token, telegramUserId, filter);
+	if (invalid) return invalid;
+
+	try {
+		const rows = await fetchTopExpenses(sql, telegramUserId, limit, filter);
+		let text: string;
+		if (rows.length) {
+			const header = `${'ID'.padEnd(6)}${'Date'.padEnd(12)}${'Amount'.padEnd(10)}${'Category'.padEnd(14)}Note`;
+			const lines = rows.map((r) => {
+				const id = `#${r.id}`.padEnd(6);
+				const date = String(r.expense_date).padEnd(12);
+				const amount = String(r.amount).padEnd(10);
+				const category = String(r.category).padEnd(14);
+				return `${id}${date}${amount}${category}${r.note || ''}`.trimEnd();
+			});
+			text = [header, ...lines].join('\n');
+		} else {
+			text = 'No expenses found.';
+		}
+		await trySend(sql, token, telegramUserId, text);
 		return Response.json({ ok: true, rows });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';

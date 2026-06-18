@@ -62,6 +62,29 @@ export async function saveExpense(sql: Sql, telegramUserId: number, expense: Exp
 	return rows[0].id as number;
 }
 
+export async function fetchTopExpenses(sql: Sql, telegramUserId: number, limit: number, filter?: string) {
+	if (filter) {
+		const pattern = `${filter}%`;
+		return sql`
+			SELECT e.id, e.amount, c.name AS category, e.note, e.expense_date::text AS expense_date
+			FROM expenses e
+			JOIN categories c ON c.id = e.category_id
+			WHERE e.telegram_user_id = ${telegramUserId}
+				AND e.expense_date::text LIKE ${pattern}
+			ORDER BY e.amount DESC
+			LIMIT ${limit}
+		`;
+	}
+	return sql`
+		SELECT e.id, e.amount, c.name AS category, e.note, e.expense_date::text AS expense_date
+		FROM expenses e
+		JOIN categories c ON c.id = e.category_id
+		WHERE e.telegram_user_id = ${telegramUserId}
+		ORDER BY e.amount DESC
+		LIMIT ${limit}
+	`;
+}
+
 export async function fetchBiggestExpense(sql: Sql, telegramUserId: number, filter: string) {
 	const pattern = `${filter}%`;
 	return sql`

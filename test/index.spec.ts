@@ -492,6 +492,55 @@ describe("telegram-expense-worker", () => {
 		});
 	});
 
+	describe("/top", () => {
+		it("returns rows when expenses exist", async () => {
+			mockSql.mockResolvedValue([
+				{ id: 42, amount: "300.00", category: "gym", note: "bought shoes", expense_date: "2026-06-17" },
+			]);
+
+			const request = postRequest(telegramMessage("/top"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean; rows: unknown[] };
+			expect(body.ok).toBe(true);
+			expect(body.rows).toHaveLength(1);
+		});
+
+		it("returns ok with empty rows when no expenses", async () => {
+			const request = postRequest(telegramMessage("/top"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean; rows: unknown[] };
+			expect(body.ok).toBe(true);
+			expect(body.rows).toEqual([]);
+		});
+
+		it("passes N and filter when given /top 5 2026-05", async () => {
+			const request = postRequest(telegramMessage("/top 5 2026-05"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+		});
+
+		it("returns ok: false when filter is invalid", async () => {
+			const request = postRequest(telegramMessage("/top june"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			expect(response.status).toBe(200);
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(false);
+		});
+	});
+
 	describe("/search", () => {
 		it("returns matching rows when keyword matches", async () => {
 			mockSql.mockResolvedValue([

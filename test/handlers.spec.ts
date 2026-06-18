@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { handleReport, handleList, handleAddExpense, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, handleSearch, handleCallbackQuery, handleRename, HELP_TEXT } from "../src/handlers";
+import { handleReport, handleList, handleAddExpense, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, handleSearch, handleCallbackQuery, handleRename, handleTop, HELP_TEXT } from "../src/handlers";
 import type { Sql } from "../src/types";
 
-const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockSaveLog, mockDeleteExpense, mockFetchBiggestExpense, mockDeleteLatestExpense, mockSetBudget, mockRemoveBudget, mockFetchBudgets, mockFetchBudgetForCategory, mockSearchExpenses, mockRenameCategory, mockSendTelegramMessage, mockSendTelegramDocument, mockAnswerCallbackQuery, mockEditMessageReplyMarkup } = vi.hoisted(() => ({
+const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockSaveLog, mockDeleteExpense, mockFetchBiggestExpense, mockDeleteLatestExpense, mockSetBudget, mockRemoveBudget, mockFetchBudgets, mockFetchBudgetForCategory, mockSearchExpenses, mockRenameCategory, mockFetchTopExpenses, mockSendTelegramMessage, mockSendTelegramDocument, mockAnswerCallbackQuery, mockEditMessageReplyMarkup } = vi.hoisted(() => ({
 	mockFetchReport: vi.fn().mockResolvedValue([]),
 	mockFetchRecent: vi.fn().mockResolvedValue([]),
 	mockFetchCategoryTotals: vi.fn().mockResolvedValue([]),
@@ -17,6 +17,7 @@ const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpen
 	mockFetchBudgetForCategory: vi.fn().mockResolvedValue([]),
 	mockSearchExpenses: vi.fn().mockResolvedValue([]),
 	mockRenameCategory: vi.fn().mockResolvedValue({ found: true, count: 3 }),
+	mockFetchTopExpenses: vi.fn().mockResolvedValue([]),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
 	mockSendTelegramDocument: vi.fn().mockResolvedValue(undefined),
 	mockAnswerCallbackQuery: vi.fn().mockResolvedValue(undefined),
@@ -38,6 +39,7 @@ vi.mock("../src/db", () => ({
 	fetchBudgetForCategory: mockFetchBudgetForCategory,
 	searchExpenses: mockSearchExpenses,
 	renameCategory: mockRenameCategory,
+	fetchTopExpenses: mockFetchTopExpenses,
 }));
 
 vi.mock("../src/telegram", () => ({
@@ -66,6 +68,7 @@ beforeEach(() => {
 	mockFetchBudgetForCategory.mockResolvedValue([]);
 	mockSearchExpenses.mockResolvedValue([]);
 	mockRenameCategory.mockResolvedValue({ found: true, count: 3 });
+	mockFetchTopExpenses.mockResolvedValue([]);
 	mockSendTelegramMessage.mockResolvedValue(undefined);
 	mockSendTelegramDocument.mockResolvedValue(undefined);
 	mockAnswerCallbackQuery.mockResolvedValue(undefined);
@@ -835,6 +838,69 @@ describe("handleRename", () => {
 		mockRenameCategory.mockRejectedValue(new Error("DB error"));
 
 		const response = await handleRename(sql, 42, token, "coffee cafe");
+
+		expect(response.status).toBe(200);
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "DB error");
+	});
+});
+
+describe("handleTop", () => {
+	it("defaults to limit 10 with no args", async () => {
+		await handleTop(sql, 42, token, "");
+
+		expect(mockFetchTopExpenses).toHaveBeenCalledWith(sql, 42, 10, undefined);
+	});
+
+	it("parses N from the first token when it is a number", async () => {
+		await handleTop(sql, 42, token, "5");
+
+		expect(mockFetchTopExpenses).toHaveBeenCalledWith(sql, 42, 5, undefined);
+	});
+
+	it("treats first token as filter when it matches date pattern", async () => {
+		await handleTop(sql, 42, token, "2026-05");
+
+		expect(mockFetchTopExpenses).toHaveBeenCalledWith(sql, 42, 10, "2026-05");
+	});
+
+	it("parses N and filter when both are provided", async () => {
+		await handleTop(sql, 42, token, "5 2026-05");
+
+		expect(mockFetchTopExpenses).toHaveBeenCalledWith(sql, 42, 5, "2026-05");
+	});
+
+	it("sends a formatted table when rows exist", async () => {
+		mockFetchTopExpenses.mockResolvedValue([
+			{ id: 42, amount: "300.00", category: "gym", note: "bought shoes", expense_date: "2026-06-17" },
+			{ id: 18, amount: "250.00", category: "groceries", note: "", expense_date: "2026-05-10" },
+		]);
+
+		await handleTop(sql, 42, token, "");
+
+		const sent = mockSendTelegramMessage.mock.calls[0][2] as string;
+		expect(sent).toContain("ID    Date        Amount    Category      Note");
+		expect(sent).toContain("#42");
+		expect(sent).toContain("gym");
+		expect(sent).toContain("bought shoes");
+	});
+
+	it("sends 'No expenses found.' when there are no results", async () => {
+		await handleTop(sql, 42, token, "");
+
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "No expenses found.");
+	});
+
+	it("clamps N to 1 when 0 is given", async () => {
+		await handleTop(sql, 42, token, "0");
+
+		expect(mockFetchTopExpenses).toHaveBeenCalledWith(sql, 42, 1, undefined);
+	});
+
+	it("returns 200 and logs when fetchTopExpenses throws", async () => {
+		mockFetchTopExpenses.mockRejectedValue(new Error("DB error"));
+
+		const response = await handleTop(sql, 42, token, "");
 
 		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
