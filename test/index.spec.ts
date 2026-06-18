@@ -92,13 +92,13 @@ describe("telegram-expense-worker", () => {
 	});
 
 	describe("/migrate", () => {
-		it("returns 500 when ADMIN_IDS is not configured", async () => {
+		it("returns 200 when ADMIN_IDS is not configured", async () => {
 			const request = postRequest(telegramMessage("/migrate"));
 			const ctx = createExecutionContext();
 			const response = await worker.fetch(request, testEnv, ctx);
 			await waitOnExecutionContext(ctx);
 
-			expect(response.status).toBe(500);
+			expect(response.status).toBe(200);
 			const body = await response.json() as { error: string };
 			expect(body.error).toBe("ADMIN_IDS is not configured");
 		});
@@ -124,13 +124,13 @@ describe("telegram-expense-worker", () => {
 	});
 
 	describe("/logs", () => {
-		it("returns 500 when ADMIN_IDS is not configured", async () => {
+		it("returns 200 when ADMIN_IDS is not configured", async () => {
 			const request = postRequest(telegramMessage("/logs"));
 			const ctx = createExecutionContext();
 			const response = await worker.fetch(request, testEnv, ctx);
 			await waitOnExecutionContext(ctx);
 
-			expect(response.status).toBe(500);
+			expect(response.status).toBe(200);
 			const body = await response.json() as { error: string };
 			expect(body.error).toBe("ADMIN_IDS is not configured");
 		});
@@ -156,13 +156,13 @@ describe("telegram-expense-worker", () => {
 	});
 
 	describe("/droppending", () => {
-		it("returns 500 when ADMIN_IDS is not configured", async () => {
+		it("returns 200 when ADMIN_IDS is not configured", async () => {
 			const request = postRequest(telegramMessage("/droppending"));
 			const ctx = createExecutionContext();
 			const response = await worker.fetch(request, testEnv, ctx);
 			await waitOnExecutionContext(ctx);
 
-			expect(response.status).toBe(500);
+			expect(response.status).toBe(200);
 		});
 
 		it("returns 200 when user is not in ADMIN_IDS", async () => {

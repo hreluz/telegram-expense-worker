@@ -161,12 +161,9 @@ To test the full Telegram reply flow, expose the local server with `cloudflared 
 
 ## HTTP response status
 
-**Always return 200** for anything the handler processed — including user errors (bad input, not found, unauthorized, invalid command). Telegram retries any non-200 response, which causes the bot to send duplicate messages to the user in a loop.
+**Always return 200** — for everything: user errors, invalid commands, not found, unauthorized, and infrastructure failures. Telegram retries any non-200 response, which causes the bot to send duplicate messages to the user in a loop.
 
-Only return a non-200 status for genuine infrastructure failures where a retry is actually useful:
-- **500** — database is down, Telegram API unreachable, or other server-side failures
-
-Never use 400, 403, or 404 in handlers. User-facing errors belong in the Telegram message text, not in the HTTP status.
+Never use 400, 403, 404, or 500 in handlers. All errors — including DB failures and Telegram API errors — are sent to the user as a Telegram message and logged via `saveLog`. The HTTP response always has status 200.
 
 ## Code style
 

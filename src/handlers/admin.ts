@@ -6,7 +6,7 @@ import { trySend } from './utils';
 async function requireAdmin(sql: Sql, telegramUserId: number, token: string, adminIds: string | undefined): Promise<Response | null> {
 	if (!adminIds) {
 		await trySend(sql, token, telegramUserId, 'ADMIN_IDS is not configured.');
-		return Response.json({ ok: false, error: 'ADMIN_IDS is not configured' }, { status: 500 });
+		return Response.json({ ok: false, error: 'ADMIN_IDS is not configured' });
 	}
 	const allowed = adminIds.split(',').map((id) => id.trim());
 	if (!allowed.includes(String(telegramUserId))) {
@@ -27,8 +27,8 @@ export async function handleMigrate(sql: Sql, telegramUserId: number, token: str
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';
 		await saveLog(sql, telegramUserId, message);
-		await trySend(sql, token, telegramUserId, 'Migration failed.');
-		return Response.json({ ok: false, error: message }, { status: 500 });
+		await trySend(sql, token, telegramUserId, message);
+		return Response.json({ ok: false, error: message });
 	}
 }
 
@@ -44,8 +44,8 @@ export async function handleLogs(sql: Sql, telegramUserId: number, token: string
 		return Response.json({ ok: true, rows });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';
-		await trySend(sql, token, telegramUserId, 'Something went wrong.');
-		return Response.json({ ok: false, error: message }, { status: 500 });
+		await trySend(sql, token, telegramUserId, message);
+		return Response.json({ ok: false, error: message });
 	}
 }
 
@@ -59,7 +59,7 @@ export async function handleDropPending(sql: Sql, telegramUserId: number, token:
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';
 		await saveLog(sql, telegramUserId, message);
-		await trySend(sql, token, telegramUserId, 'Failed to drop pending updates.');
-		return Response.json({ ok: false, error: message }, { status: 500 });
+		await trySend(sql, token, telegramUserId, message);
+		return Response.json({ ok: false, error: message });
 	}
 }

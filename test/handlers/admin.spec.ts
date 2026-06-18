@@ -37,10 +37,10 @@ beforeEach(() => {
 });
 
 describe("handleMigrate", () => {
-	it("returns 500 when ADMIN_IDS is not configured", async () => {
+	it("returns 200 when ADMIN_IDS is not configured", async () => {
 		const response = await handleMigrate(sql, 42, token, undefined);
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(200);
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "ADMIN_IDS is not configured.");
 	});
 
@@ -68,22 +68,22 @@ describe("handleMigrate", () => {
 		expect(body.ok).toBe(true);
 	});
 
-	it("logs the error and sends a failure message when migrate throws", async () => {
+	it("logs the error and sends the error message when migrate throws", async () => {
 		mockMigrate.mockRejectedValue(new Error("Migration error"));
 
 		const response = await handleMigrate(sql, 42, token, "42");
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "Migration error");
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Migration failed.");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Migration error");
 	});
 });
 
 describe("handleLogs", () => {
-	it("returns 500 when ADMIN_IDS is not configured", async () => {
+	it("returns 200 when ADMIN_IDS is not configured", async () => {
 		const response = await handleLogs(sql, 42, token, undefined);
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(200);
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "ADMIN_IDS is not configured.");
 	});
 
@@ -121,21 +121,21 @@ describe("handleLogs", () => {
 		expect(body.rows).toEqual(rows);
 	});
 
-	it("returns 500 and sends a generic message when fetchLogs throws", async () => {
+	it("returns 200 and sends the error message when fetchLogs throws", async () => {
 		mockFetchLogs.mockRejectedValue(new Error("DB connection failed"));
 
 		const response = await handleLogs(sql, 42, token, "42");
 
-		expect(response.status).toBe(500);
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+		expect(response.status).toBe(200);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "DB connection failed");
 	});
 });
 
 describe("handleDropPending", () => {
-	it("returns 500 when ADMIN_IDS is not configured", async () => {
+	it("returns 200 when ADMIN_IDS is not configured", async () => {
 		const response = await handleDropPending(sql, 42, token, "https://example.com", undefined);
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(200);
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "ADMIN_IDS is not configured.");
 	});
 
@@ -155,13 +155,13 @@ describe("handleDropPending", () => {
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Pending updates dropped.");
 	});
 
-	it("logs the error and sends a failure message when dropPendingUpdates throws", async () => {
+	it("logs the error and sends the error message when dropPendingUpdates throws", async () => {
 		mockDropPendingUpdates.mockRejectedValue(new Error("Telegram API error 400: Bad Request"));
 
 		const response = await handleDropPending(sql, 42, token, "https://example.com", "42");
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "Telegram API error 400: Bad Request");
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Failed to drop pending updates.");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Telegram API error 400: Bad Request");
 	});
 });

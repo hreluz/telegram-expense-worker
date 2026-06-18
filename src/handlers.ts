@@ -36,8 +36,8 @@ export async function handleReport(sql: Sql, telegramUserId: number, token: stri
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';
 		await saveLog(sql, telegramUserId, message);
-		await trySend(sql, token, telegramUserId, 'Something went wrong.');
-		return Response.json({ ok: false, error: message }, { status: 500 });
+		await trySend(sql, token, telegramUserId, message);
+		return Response.json({ ok: false, error: message });
 	}
 }
 
@@ -73,8 +73,8 @@ export async function handleList(sql: Sql, telegramUserId: number, token: string
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';
 		await saveLog(sql, telegramUserId, message);
-		await trySend(sql, token, telegramUserId, 'Something went wrong.');
-		return Response.json({ ok: false, error: message }, { status: 500 });
+		await trySend(sql, token, telegramUserId, message);
+		return Response.json({ ok: false, error: message });
 	}
 }
 
@@ -103,8 +103,8 @@ export async function handleDelete(sql: Sql, telegramUserId: number, token: stri
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';
 		await saveLog(sql, telegramUserId, message);
-		await trySend(sql, token, telegramUserId, 'Something went wrong.');
-		return Response.json({ ok: false, error: message }, { status: 500 });
+		await trySend(sql, token, telegramUserId, message);
+		return Response.json({ ok: false, error: message });
 	}
 }
 
@@ -121,8 +121,8 @@ export async function handleUndo(sql: Sql, telegramUserId: number, token: string
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';
 		await saveLog(sql, telegramUserId, message);
-		await trySend(sql, token, telegramUserId, 'Something went wrong.');
-		return Response.json({ ok: false, error: message }, { status: 500 });
+		await trySend(sql, token, telegramUserId, message);
+		return Response.json({ ok: false, error: message });
 	}
 }
 
@@ -201,8 +201,8 @@ export async function handleSummary(sql: Sql, telegramUserId: number, token: str
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';
 		await saveLog(sql, telegramUserId, message);
-		await trySend(sql, token, telegramUserId, 'Something went wrong.');
-		return Response.json({ ok: false, error: message }, { status: 500 });
+		await trySend(sql, token, telegramUserId, message);
+		return Response.json({ ok: false, error: message });
 	}
 }
 
@@ -263,8 +263,8 @@ export async function handleBudget(sql: Sql, telegramUserId: number, token: stri
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';
 		await saveLog(sql, telegramUserId, message);
-		await trySend(sql, token, telegramUserId, 'Something went wrong.');
-		return Response.json({ ok: false, error: message }, { status: 500 });
+		await trySend(sql, token, telegramUserId, message);
+		return Response.json({ ok: false, error: message });
 	}
 }
 

@@ -133,14 +133,14 @@ describe("handleReport", () => {
 		expect(mockFetchReport).not.toHaveBeenCalled();
 	});
 
-	it("logs the error and sends a generic message when fetchReport throws", async () => {
+	it("returns 200 and sends the error message when fetchReport throws", async () => {
 		mockFetchReport.mockRejectedValue(new Error("DB connection failed"));
 
 		const response = await handleReport(sql, 42, token);
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB connection failed");
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "DB connection failed");
 	});
 });
 
@@ -178,14 +178,14 @@ describe("handleReport categories", () => {
 		expect(mockFetchCategoryTotals).not.toHaveBeenCalled();
 	});
 
-	it("logs the error and sends a generic message when fetchCategoryTotals throws", async () => {
+	it("returns 200 and sends the error message when fetchCategoryTotals throws", async () => {
 		mockFetchCategoryTotals.mockRejectedValue(new Error("DB connection failed"));
 
 		const response = await handleReport(sql, 42, token, 'categories');
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB connection failed");
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "DB connection failed");
 	});
 });
 
@@ -256,14 +256,14 @@ describe("handleList", () => {
 		expect(mockFetchRecent).not.toHaveBeenCalled();
 	});
 
-	it("logs the error and sends a generic message when fetchRecent throws", async () => {
+	it("returns 200 and sends the error message when fetchRecent throws", async () => {
 		mockFetchRecent.mockRejectedValue(new Error("DB connection failed"));
 
 		const response = await handleList(sql, 42, token);
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB connection failed");
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "DB connection failed");
 	});
 });
 
@@ -298,14 +298,14 @@ describe("handleList categories", () => {
 		expect(mockFetchCategoryTotals).not.toHaveBeenCalled();
 	});
 
-	it("logs the error and sends a generic message when fetchCategoryTotals throws", async () => {
+	it("returns 200 and sends the error message when fetchCategoryTotals throws", async () => {
 		mockFetchCategoryTotals.mockRejectedValue(new Error("DB connection failed"));
 
 		const response = await handleList(sql, 42, token, 'categories');
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB connection failed");
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "DB connection failed");
 	});
 });
 
@@ -407,14 +407,14 @@ describe("handleDelete", () => {
 		expect(mockDeleteExpense).not.toHaveBeenCalled();
 	});
 
-	it("logs error and sends generic message when deleteExpense throws", async () => {
+	it("returns 200 and sends the error message when deleteExpense throws", async () => {
 		mockDeleteExpense.mockRejectedValue(new Error("DB error"));
 
 		const response = await handleDelete(sql, 42, token, "5");
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "DB error");
 	});
 });
 
@@ -511,14 +511,14 @@ describe("handleSummary", () => {
 		expect(sent).toContain("[over by 80.00]");
 	});
 
-	it("logs error and sends generic message when db throws", async () => {
+	it("returns 200 and sends the error message when db throws", async () => {
 		mockFetchCategoryTotals.mockRejectedValue(new Error("DB down"));
 
 		const response = await handleSummary(sql, 42, token);
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB down");
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "DB down");
 	});
 });
 
@@ -544,14 +544,14 @@ describe("handleUndo", () => {
 		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "No expenses to undo.");
 	});
 
-	it("logs error and sends generic message when deleteLatestExpense throws", async () => {
+	it("returns 200 and sends the error message when deleteLatestExpense throws", async () => {
 		mockDeleteLatestExpense.mockRejectedValue(new Error("DB error"));
 
 		const response = await handleUndo(sql, 42, token);
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "DB error");
 	});
 });
 
@@ -629,13 +629,13 @@ describe("handleBudget", () => {
 		expect(mockSetBudget).not.toHaveBeenCalled();
 	});
 
-	it("logs error and sends generic message when setBudget throws", async () => {
+	it("returns 200 and sends the error message when setBudget throws", async () => {
 		mockSetBudget.mockRejectedValue(new Error("DB error"));
 
 		const response = await handleBudget(sql, 42, token, "gym 500");
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(200);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "DB error");
 	});
 });
