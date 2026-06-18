@@ -7,7 +7,7 @@ export { HELP_TEXT, parseExpense } from './handlers/utils';
 export * from './handlers/admin';
 
 export async function handleHelp(sql: Sql, telegramUserId: number, token: string): Promise<Response> {
-	await trySend(sql, token, telegramUserId, HELP_TEXT);
+	await trySend(sql, token, telegramUserId, HELP_TEXT, 'HTML');
 	return Response.json({ ok: true });
 }
 

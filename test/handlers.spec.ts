@@ -64,7 +64,7 @@ describe("handleHelp", () => {
 	it("sends HELP_TEXT to the user", async () => {
 		await handleHelp(sql, 42, token);
 
-		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, HELP_TEXT);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, HELP_TEXT, 'HTML');
 	});
 
 	it("returns ok", async () => {

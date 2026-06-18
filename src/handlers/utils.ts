@@ -2,38 +2,36 @@ import type { Sql, Expense } from '../types';
 import { sendTelegramMessage } from '../telegram';
 import { saveLog } from '../db';
 
-export const HELP_TEXT = `Expense Tracker Bot
+export const HELP_TEXT = `<b>Expense Tracker Bot</b>
 
-Log an expense:
-  300 gym
-  45.50 groceries weekly shopping
-  300 gym @2026-06-10
-  300 gym @2026-06-10 bought shoes
+Send a message to log an expense:
+<pre>300 gym
+45.50 groceries weekly shopping
+300 gym @2026-06-10
+300 gym @2026-06-10 bought shoes</pre>
+Format: &lt;amount&gt; &lt;category&gt; [@YYYY-MM-DD] [note]
 
-Format: <amount> <category> [@YYYY-MM-DD] [note]
+<b>View</b>
+/list — last 10 expenses
+/list 2026-05 — filter by year, month, or day
+/report — export full history as CSV
+/summary — monthly spending snapshot
 
-Commands:
-  /list                        — last 10 expenses (with IDs)
-  /list 2026-05                — filter by year, month, or day
-  /list categories             — totals per category (all time)
-  /list categories 2026-05     — totals per category for a period
-  /report                      — full history as CSV file
-  /report 2026-05              — filtered CSV for a period
-  /report categories           — category totals as CSV
-  /report categories 2026-05   — category totals CSV for a period
-  /undo                        — delete the most recently added expense
-  /delete <id>                 — delete an expense by ID
-  /summary                     — spending snapshot for the current month
-  /budget <category> <amount>  — set a monthly budget for a category
-  /budget <category> off       — remove a budget
-  /budget                      — list all budgets
-  /help                        — show this message
+<b>Manage</b>
+/undo — delete last expense
+/delete &lt;id&gt; — delete by ID
 
+<b>Budgets</b>
+/budget gym 500 — set monthly limit
+/budget gym off — remove limit
+/budget — list all budgets
+
+Add <code>categories</code> after /list or /report for category totals.
 Date filter format: YYYY, YYYY-MM, or YYYY-MM-DD`;
 
-export async function trySend(sql: Sql, token: string, telegramUserId: number, text: string) {
+export async function trySend(sql: Sql, token: string, telegramUserId: number, text: string, parseMode?: string) {
 	try {
-		await sendTelegramMessage(token, telegramUserId, text);
+		await (parseMode ? sendTelegramMessage(token, telegramUserId, text, parseMode) : sendTelegramMessage(token, telegramUserId, text));
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Failed to send Telegram message';
 		await saveLog(sql, telegramUserId, message);
