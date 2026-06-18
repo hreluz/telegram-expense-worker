@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { handleReport, handleList, handleAddExpense, handleHelp, handleDelete, handleSummary, handleUndo, HELP_TEXT } from "../src/handlers";
+import { handleReport, handleList, handleAddExpense, handleHelp, handleDelete, handleSummary, handleUndo, handleBudget, HELP_TEXT } from "../src/handlers";
 import type { Sql } from "../src/types";
 
-const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockSaveLog, mockDeleteExpense, mockFetchBiggestExpense, mockDeleteLatestExpense, mockSendTelegramMessage, mockSendTelegramDocument } = vi.hoisted(() => ({
+const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpense, mockSaveLog, mockDeleteExpense, mockFetchBiggestExpense, mockDeleteLatestExpense, mockSetBudget, mockRemoveBudget, mockFetchBudgets, mockFetchBudgetForCategory, mockSendTelegramMessage, mockSendTelegramDocument } = vi.hoisted(() => ({
 	mockFetchReport: vi.fn().mockResolvedValue([]),
 	mockFetchRecent: vi.fn().mockResolvedValue([]),
 	mockFetchCategoryTotals: vi.fn().mockResolvedValue([]),
@@ -11,6 +11,10 @@ const { mockFetchReport, mockFetchRecent, mockFetchCategoryTotals, mockSaveExpen
 	mockDeleteExpense: vi.fn().mockResolvedValue({ found: true, categoryDeleted: false }),
 	mockFetchBiggestExpense: vi.fn().mockResolvedValue([]),
 	mockDeleteLatestExpense: vi.fn().mockResolvedValue({ found: true, categoryDeleted: false, expense: { id: 1, amount: 300, category: 'gym', expense_date: '2026-06-17' } }),
+	mockSetBudget: vi.fn().mockResolvedValue(undefined),
+	mockRemoveBudget: vi.fn().mockResolvedValue(true),
+	mockFetchBudgets: vi.fn().mockResolvedValue([]),
+	mockFetchBudgetForCategory: vi.fn().mockResolvedValue([]),
 	mockSendTelegramMessage: vi.fn().mockResolvedValue(undefined),
 	mockSendTelegramDocument: vi.fn().mockResolvedValue(undefined),
 }));
@@ -24,6 +28,10 @@ vi.mock("../src/db", () => ({
 	deleteExpense: mockDeleteExpense,
 	fetchBiggestExpense: mockFetchBiggestExpense,
 	deleteLatestExpense: mockDeleteLatestExpense,
+	setBudget: mockSetBudget,
+	removeBudget: mockRemoveBudget,
+	fetchBudgets: mockFetchBudgets,
+	fetchBudgetForCategory: mockFetchBudgetForCategory,
 }));
 
 vi.mock("../src/telegram", () => ({
@@ -44,6 +52,10 @@ beforeEach(() => {
 	mockDeleteExpense.mockResolvedValue({ found: true, categoryDeleted: false });
 	mockFetchBiggestExpense.mockResolvedValue([]);
 	mockDeleteLatestExpense.mockResolvedValue({ found: true, categoryDeleted: false, expense: { id: 1, amount: 300, category: 'gym', expense_date: '2026-06-17' } });
+	mockSetBudget.mockResolvedValue(undefined);
+	mockRemoveBudget.mockResolvedValue(true);
+	mockFetchBudgets.mockResolvedValue([]);
+	mockFetchBudgetForCategory.mockResolvedValue([]);
 	mockSendTelegramMessage.mockResolvedValue(undefined);
 	mockSendTelegramDocument.mockResolvedValue(undefined);
 });
@@ -346,6 +358,16 @@ describe("handleAddExpense", () => {
 		expect(body.error).toBe("DB connection failed");
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB connection failed");
 	});
+
+	it("appends over-budget warning when category exceeds its monthly budget", async () => {
+		mockFetchBudgetForCategory.mockResolvedValue([{ amount: "200.00" }]);
+		mockFetchCategoryTotals.mockResolvedValue([{ category: "gym", total: "350.00" }]);
+
+		await handleAddExpense(sql, 42, "300 gym", token);
+
+		const sent = mockSendTelegramMessage.mock.calls[0][2] as string;
+		expect(sent).toContain("Warning: gym is over budget (150.00 over this month)");
+	});
 });
 
 describe("handleDelete", () => {
@@ -462,6 +484,33 @@ describe("handleSummary", () => {
 		expect(sent).toContain("#1  300.00  gym  (2026-06-01)");
 	});
 
+	it("shows budget alongside category total when a budget is set", async () => {
+		mockFetchCategoryTotals
+			.mockResolvedValueOnce([{ category: "gym", total: "450.00" }])
+			.mockResolvedValueOnce([]);
+		mockFetchBiggestExpense.mockResolvedValue([]);
+		mockFetchBudgets.mockResolvedValue([{ category: "gym", amount: "500.00" }]);
+
+		await handleSummary(sql, 42, token);
+
+		const sent = mockSendTelegramMessage.mock.calls[0][2] as string;
+		expect(sent).toContain("450.00 / 500.00");
+	});
+
+	it("shows over-budget warning and marker when category exceeds budget", async () => {
+		mockFetchCategoryTotals
+			.mockResolvedValueOnce([{ category: "groceries", total: "380.00" }])
+			.mockResolvedValueOnce([]);
+		mockFetchBiggestExpense.mockResolvedValue([]);
+		mockFetchBudgets.mockResolvedValue([{ category: "groceries", amount: "300.00" }]);
+
+		await handleSummary(sql, 42, token);
+
+		const sent = mockSendTelegramMessage.mock.calls[0][2] as string;
+		expect(sent).toContain("Warning: groceries is over budget (80.00 over)");
+		expect(sent).toContain("[over by 80.00]");
+	});
+
 	it("logs error and sends generic message when db throws", async () => {
 		mockFetchCategoryTotals.mockRejectedValue(new Error("DB down"));
 
@@ -499,6 +548,91 @@ describe("handleUndo", () => {
 		mockDeleteLatestExpense.mockRejectedValue(new Error("DB error"));
 
 		const response = await handleUndo(sql, 42, token);
+
+		expect(response.status).toBe(500);
+		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Something went wrong.");
+	});
+});
+
+describe("handleBudget", () => {
+	it("sets a budget and sends confirmation", async () => {
+		const response = await handleBudget(sql, 42, token, "gym 500");
+		const body = await response.json() as { ok: boolean };
+
+		expect(body.ok).toBe(true);
+		expect(mockSetBudget).toHaveBeenCalledWith(sql, 42, "gym", 500);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Budget set: gym  500.00/month");
+	});
+
+	it("lowercases the category when setting a budget", async () => {
+		await handleBudget(sql, 42, token, "GYM 500");
+
+		expect(mockSetBudget).toHaveBeenCalledWith(sql, 42, "gym", 500);
+	});
+
+	it("removes an existing budget and sends confirmation", async () => {
+		mockRemoveBudget.mockResolvedValue(true);
+
+		const response = await handleBudget(sql, 42, token, "gym off");
+		const body = await response.json() as { ok: boolean };
+
+		expect(body.ok).toBe(true);
+		expect(mockRemoveBudget).toHaveBeenCalledWith(sql, 42, "gym");
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "Budget removed: gym");
+	});
+
+	it("returns 200 and sends message when no budget exists to remove", async () => {
+		mockRemoveBudget.mockResolvedValue(false);
+
+		const response = await handleBudget(sql, 42, token, "gym off");
+
+		expect(response.status).toBe(200);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "No budget set for gym.");
+	});
+
+	it("lists all budgets when called with no arguments", async () => {
+		mockFetchBudgets.mockResolvedValue([
+			{ category: "gym", amount: "500.00" },
+			{ category: "groceries", amount: "300.00" },
+		]);
+
+		await handleBudget(sql, 42, token, "");
+
+		const sent = mockSendTelegramMessage.mock.calls[0][2] as string;
+		expect(sent).toContain("Budgets:");
+		expect(sent).toContain("gym");
+		expect(sent).toContain("500.00");
+		expect(sent).toContain("groceries");
+	});
+
+	it("sends 'No budgets set.' when there are no budgets", async () => {
+		mockFetchBudgets.mockResolvedValue([]);
+
+		await handleBudget(sql, 42, token, "");
+
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, "No budgets set.");
+	});
+
+	it("returns 200 and sends usage hint when amount is invalid", async () => {
+		const response = await handleBudget(sql, 42, token, "gym abc");
+
+		expect(response.status).toBe(200);
+		expect(mockSendTelegramMessage).toHaveBeenCalledWith(token, 42, expect.stringContaining("Use: /budget"));
+		expect(mockSetBudget).not.toHaveBeenCalled();
+	});
+
+	it("returns 200 and sends usage hint when amount is zero", async () => {
+		const response = await handleBudget(sql, 42, token, "gym 0");
+
+		expect(response.status).toBe(200);
+		expect(mockSetBudget).not.toHaveBeenCalled();
+	});
+
+	it("logs error and sends generic message when setBudget throws", async () => {
+		mockSetBudget.mockRejectedValue(new Error("DB error"));
+
+		const response = await handleBudget(sql, 42, token, "gym 500");
 
 		expect(response.status).toBe(500);
 		expect(mockSaveLog).toHaveBeenCalledWith(sql, 42, "DB error");

@@ -24,6 +24,9 @@ Commands:
   /undo                        — delete the most recently added expense
   /delete <id>                 — delete an expense by ID
   /summary                     — spending snapshot for the current month
+  /budget <category> <amount>  — set a monthly budget for a category
+  /budget <category> off       — remove a budget
+  /budget                      — list all budgets
   /help                        — show this message
 
 Date filter format: YYYY, YYYY-MM, or YYYY-MM-DD`;

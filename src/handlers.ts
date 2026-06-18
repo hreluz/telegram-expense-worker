@@ -1,5 +1,5 @@
 import type { Sql } from './types';
-import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, saveLog, deleteExpense, fetchBiggestExpense, deleteLatestExpense } from './db';
+import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, saveLog, deleteExpense, fetchBiggestExpense, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory } from './db';
 import { sendTelegramMessage, sendTelegramDocument } from './telegram';
 import { HELP_TEXT, trySend, validateFilter, parseExpense, todayIso, prevMonth } from './handlers/utils';
 
@@ -147,7 +147,24 @@ export async function handleSummary(sql: Sql, telegramUserId: number, token: str
 		const biggestRows = await fetchBiggestExpense(sql, telegramUserId, currentMonth);
 		const biggest = biggestRows[0];
 
+		const budgetRows = await fetchBudgets(sql, telegramUserId);
+		const budgetMap = new Map(budgetRows.map((b) => [b.category as string, Number(b.amount)]));
+
+		const overBudget = thisRows.filter((r) => {
+			const budget = budgetMap.get(String(r.category));
+			return budget !== undefined && Number(r.total) > budget;
+		});
+
 		const lines: string[] = [`${monthLabel} Summary`, ''];
+
+		if (overBudget.length > 0) {
+			for (const r of overBudget) {
+				const budget = budgetMap.get(String(r.category))!;
+				const over = (Number(r.total) - budget).toFixed(2);
+				lines.push(`Warning: ${r.category} is over budget (${over} over)`);
+			}
+			lines.push('');
+		}
 
 		lines.push(`Total spent:  ${thisTotal.toFixed(2)}`);
 		if (lastTotal > 0) {
@@ -161,7 +178,15 @@ export async function handleSummary(sql: Sql, telegramUserId: number, token: str
 		lines.push('');
 		lines.push('Top categories:');
 		for (const r of top3) {
-			lines.push(`  ${String(r.category).padEnd(16)}${Number(r.total).toFixed(2)}`);
+			const budget = budgetMap.get(String(r.category));
+			const actual = Number(r.total);
+			if (budget !== undefined) {
+				const overBy = actual - budget;
+				const budgetPart = overBy > 0 ? ` / ${budget.toFixed(2)}  [over by ${overBy.toFixed(2)}]` : ` / ${budget.toFixed(2)}`;
+				lines.push(`  ${String(r.category).padEnd(16)}${actual.toFixed(2)}${budgetPart}`);
+			} else {
+				lines.push(`  ${String(r.category).padEnd(16)}${actual.toFixed(2)}`);
+			}
 		}
 
 		if (biggest) {
@@ -181,12 +206,92 @@ export async function handleSummary(sql: Sql, telegramUserId: number, token: str
 	}
 }
 
+export async function handleBudget(sql: Sql, telegramUserId: number, token: string, args: string): Promise<Response> {
+	const parts = args.trim().split(/\s+/).filter(Boolean);
+
+	// No args — list all budgets
+	if (parts.length === 0) {
+		try {
+			const rows = await fetchBudgets(sql, telegramUserId);
+			if (rows.length === 0) {
+				await trySend(sql, token, telegramUserId, 'No budgets set.');
+				return Response.json({ ok: true });
+			}
+			const lines = rows.map((r) => `  ${String(r.category).padEnd(16)}${Number(r.amount).toFixed(2)}`);
+			await trySend(sql, token, telegramUserId, `Budgets:\n${lines.join('\n')}`);
+			return Response.json({ ok: true, rows });
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			await saveLog(sql, telegramUserId, message);
+			await trySend(sql, token, telegramUserId, 'Something went wrong.');
+			return Response.json({ ok: false, error: message }, { status: 500 });
+		}
+	}
+
+	const [category, second] = parts;
+	const categoryLower = category.toLowerCase();
+
+	// Remove budget
+	if (second === 'off') {
+		try {
+			const removed = await removeBudget(sql, telegramUserId, categoryLower);
+			if (!removed) {
+				await trySend(sql, token, telegramUserId, `No budget set for ${categoryLower}.`);
+				return Response.json({ ok: false, error: 'Budget not found' });
+			}
+			await trySend(sql, token, telegramUserId, `Budget removed: ${categoryLower}`);
+			return Response.json({ ok: true });
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			await saveLog(sql, telegramUserId, message);
+			await trySend(sql, token, telegramUserId, 'Something went wrong.');
+			return Response.json({ ok: false, error: message }, { status: 500 });
+		}
+	}
+
+	// Set budget
+	const amount = Number(second);
+	if (!second || Number.isNaN(amount) || amount <= 0) {
+		await trySend(sql, token, telegramUserId, 'Use: /budget <category> <amount> or /budget <category> off');
+		return Response.json({ ok: false, error: 'Invalid usage' });
+	}
+
+	try {
+		await setBudget(sql, telegramUserId, categoryLower, amount);
+		await trySend(sql, token, telegramUserId, `Budget set: ${categoryLower}  ${amount.toFixed(2)}/month`);
+		return Response.json({ ok: true });
+	} catch (error) {
+		const message = error instanceof Error ? error.message : 'Unknown error';
+		await saveLog(sql, telegramUserId, message);
+		await trySend(sql, token, telegramUserId, 'Something went wrong.');
+		return Response.json({ ok: false, error: message }, { status: 500 });
+	}
+}
+
 export async function handleAddExpense(sql: Sql, telegramUserId: number, text: string, token: string): Promise<Response> {
 	try {
 		const expense = parseExpense(text);
 		await saveExpense(sql, telegramUserId, expense);
 		const lines = [`Saved: ${expense.amount} ${expense.category}`, `Date: ${expense.expenseDate}`];
 		if (expense.note) lines.push(`Note: ${expense.note}`);
+
+		// Budget check (best-effort — failure silently skipped)
+		try {
+			const budgetRows = await fetchBudgetForCategory(sql, telegramUserId, expense.category);
+			if (budgetRows.length > 0) {
+				const budget = Number(budgetRows[0].amount);
+				const currentMonth = expense.expenseDate.slice(0, 7);
+				const totals = await fetchCategoryTotals(sql, telegramUserId, currentMonth);
+				const row = totals.find((r) => r.category === expense.category);
+				if (row && Number(row.total) > budget) {
+					const over = (Number(row.total) - budget).toFixed(2);
+					lines.push(`Warning: ${expense.category} is over budget (${over} over this month)`);
+				}
+			}
+		} catch {
+			// non-critical — skip warning on failure
+		}
+
 		await trySend(sql, token, telegramUserId, lines.join('\n'));
 		return Response.json({ ok: true, message: 'Saved', expense });
 	} catch (error) {

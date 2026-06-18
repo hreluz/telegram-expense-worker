@@ -53,7 +53,17 @@ ID    Date        Amount    Category      Note
 /report categories 2026-05     # category totals, May   →  categories-2026-05.csv
 ```
 
-**Get a spending summary** — send `/summary` to see a snapshot of the current month: total spent, comparison to last month, top 3 categories, and the single biggest expense.
+**Get a spending summary** — send `/summary` to see a snapshot of the current month: total spent, comparison to last month, top 3 categories (with budget vs actual if set), and the single biggest expense. Categories that exceed their budget are flagged with a warning.
+
+**Set monthly budgets** — send `/budget` to set, remove, or list monthly spending limits per category:
+
+```
+/budget gym 500          # set a 500/month budget for gym
+/budget gym off          # remove the gym budget
+/budget                  # list all budgets
+```
+
+When you save an expense that tips a category over its budget, a warning is added to the confirmation message.
 
 **Undo the last expense** — send `/undo` to delete the most recently added expense without looking up its ID. If it was the last expense in its category, the category is removed automatically.
 

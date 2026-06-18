@@ -17,6 +17,7 @@ export async function setTelegramCommands(token: string) {
 		{ command: 'delete', description: 'Delete an expense by ID' },
 		{ command: 'undo', description: 'Delete the most recently added expense' },
 		{ command: 'summary', description: 'Spending snapshot for the current month' },
+		{ command: 'budget', description: 'Set or view monthly category budgets' },
 		{ command: 'help', description: 'Show commands and examples' },
 	];
 	const res = await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {

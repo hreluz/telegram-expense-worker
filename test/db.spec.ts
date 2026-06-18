@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense, deleteLatestExpense } from "../src/db";
+import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory } from "../src/db";
 import type { Sql } from "../src/types";
 
 describe("db", () => {
@@ -109,10 +109,10 @@ describe("db", () => {
 	});
 
 	describe("migrate", () => {
-		it("creates the categories, expenses, and logs tables", async () => {
+		it("creates the categories, expenses, logs, and budgets tables", async () => {
 			await migrate(mockSql);
 
-			expect(mockSql).toHaveBeenCalledTimes(3);
+			expect(mockSql).toHaveBeenCalledTimes(4);
 		});
 	});
 
@@ -223,6 +223,65 @@ describe("db", () => {
 
 			expect(result).toEqual({ found: true, categoryDeleted: true });
 			expect(mockSql).toHaveBeenCalledTimes(3);
+		});
+	});
+
+	describe("setBudget", () => {
+		it("calls sql once to upsert the budget", async () => {
+			await setBudget(mockSql, 42, "gym", 500);
+
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("removeBudget", () => {
+		it("returns true when the budget is deleted", async () => {
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValueOnce([{ id: 1 }]);
+
+			const result = await removeBudget(mockSql, 42, "gym");
+
+			expect(result).toBe(true);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("returns false when no budget exists for that category", async () => {
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+
+			const result = await removeBudget(mockSql, 42, "gym");
+
+			expect(result).toBe(false);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("fetchBudgets", () => {
+		it("returns rows from sql", async () => {
+			const rows = [{ category: "gym", amount: "500.00" }, { category: "groceries", amount: "300.00" }];
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue(rows);
+
+			const result = await fetchBudgets(mockSql, 42);
+
+			expect(result).toEqual(rows);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("fetchBudgetForCategory", () => {
+		it("returns the budget row for the matching category", async () => {
+			const rows = [{ amount: "500.00" }];
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValue(rows);
+
+			const result = await fetchBudgetForCategory(mockSql, 42, "gym");
+
+			expect(result).toEqual(rows);
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("returns empty array when no budget is set for the category", async () => {
+			const result = await fetchBudgetForCategory(mockSql, 42, "gym");
+
+			expect(result).toEqual([]);
+			expect(mockSql).toHaveBeenCalledOnce();
 		});
 	});
 

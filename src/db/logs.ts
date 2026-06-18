@@ -28,6 +28,15 @@ export async function migrate(sql: Sql) {
 			created_at TIMESTAMPTZ DEFAULT NOW()
 		)
 	`;
+	await sql`
+		CREATE TABLE IF NOT EXISTS budgets (
+			id SERIAL PRIMARY KEY,
+			telegram_user_id BIGINT NOT NULL,
+			category TEXT NOT NULL,
+			amount NUMERIC(10, 2) NOT NULL,
+			UNIQUE (telegram_user_id, category)
+		)
+	`;
 }
 
 export async function saveLog(sql: Sql, telegramUserId: number, message: string) {
