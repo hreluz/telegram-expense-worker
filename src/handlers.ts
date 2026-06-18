@@ -1,5 +1,5 @@
 import type { Sql, Expense } from "./types";
-import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs } from "./db";
+import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense } from "./db";
 import { sendTelegramMessage, sendTelegramDocument, dropPendingUpdates, setTelegramCommands } from "./telegram";
 
 export const HELP_TEXT = `Expense Tracker Bot
@@ -13,7 +13,7 @@ Log an expense:
 Format: <amount> <category> [@YYYY-MM-DD] [note]
 
 Commands:
-  /list                        — last 10 expenses
+  /list                        — last 10 expenses (with IDs)
   /list 2026-05                — filter by year, month, or day
   /list categories             — totals per category (all time)
   /list categories 2026-05     — totals per category for a period
@@ -21,6 +21,7 @@ Commands:
   /report 2026-05              — filtered CSV for a period
   /report categories           — category totals as CSV
   /report categories 2026-05   — category totals CSV for a period
+  /delete <id>                 — delete an expense by ID
   /help                        — show this message
 
 Date filter format: YYYY, YYYY-MM, or YYYY-MM-DD`;
@@ -42,7 +43,7 @@ async function requireAdmin(sql: Sql, telegramUserId: number, token: string, adm
 	const allowed = adminIds.split(",").map((id) => id.trim());
 	if (!allowed.includes(String(telegramUserId))) {
 		await trySend(sql, token, telegramUserId, "Unauthorized.");
-		return Response.json({ ok: false, error: "Unauthorized" }, { status: 403 });
+		return Response.json({ ok: false, error: "Unauthorized" });
 	}
 	return null;
 }
@@ -97,7 +98,7 @@ const FILTER_RE = /^\d{4}(-\d{2}(-\d{2})?)?$/;
 async function validateFilter(sql: Sql, token: string, telegramUserId: number, filter: string | undefined): Promise<Response | null> {
 	if (filter && !FILTER_RE.test(filter)) {
 		await trySend(sql, token, telegramUserId, "Invalid date filter. Use YYYY, YYYY-MM, or YYYY-MM-DD");
-		return Response.json({ ok: false, error: "Invalid filter" }, { status: 400 });
+		return Response.json({ ok: false, error: "Invalid filter" });
 	}
 	return null;
 }
@@ -150,9 +151,20 @@ export async function handleList(sql: Sql, telegramUserId: number, token: string
 		}
 
 		const rows = await fetchRecent(sql, telegramUserId, filter);
-		const text = rows.length
-			? rows.map((r) => `${r.expense_date}  ${r.amount} ${r.category}${r.note ? ` (${r.note})` : ""}`).join("\n")
-			: "No expenses yet.";
+		let text: string;
+		if (rows.length) {
+			const header = `${'ID'.padEnd(6)}${'Date'.padEnd(12)}${'Amount'.padEnd(10)}${'Category'.padEnd(14)}Note`;
+			const lines = rows.map((r) => {
+				const id = `#${r.id}`.padEnd(6);
+				const date = String(r.expense_date).padEnd(12);
+				const amount = String(r.amount).padEnd(10);
+				const category = String(r.category).padEnd(14);
+				return `${id}${date}${amount}${category}${r.note || ''}`.trimEnd();
+			});
+			text = [header, ...lines].join("\n");
+		} else {
+			text = "No expenses yet.";
+		}
 		await sendTelegramMessage(token, telegramUserId, text);
 
 		return Response.json({ ok: true, rows });
@@ -220,6 +232,36 @@ export async function handleDropPending(sql: Sql, telegramUserId: number, token:
 	}
 }
 
+export async function handleDelete(sql: Sql, telegramUserId: number, token: string, args: string): Promise<Response> {
+	const idStr = args.trim();
+
+	if (!idStr) {
+		await trySend(sql, token, telegramUserId, 'Use: /delete <id>');
+		return Response.json({ ok: false, error: 'Invalid usage' });
+	}
+
+	const id = Number(idStr);
+	if (!Number.isInteger(id) || id <= 0) {
+		await trySend(sql, token, telegramUserId, 'Invalid ID. Use: /delete <id>');
+		return Response.json({ ok: false, error: 'Invalid ID' });
+	}
+
+	try {
+		const result = await deleteExpense(sql, telegramUserId, id);
+		if (!result.found) {
+			await trySend(sql, token, telegramUserId, 'Expense not found.');
+			return Response.json({ ok: false, error: 'Expense not found' });
+		}
+		await trySend(sql, token, telegramUserId, `Deleted expense #${id}.`);
+		return Response.json({ ok: true });
+	} catch (error) {
+		const message = error instanceof Error ? error.message : 'Unknown error';
+		await saveLog(sql, telegramUserId, message);
+		await trySend(sql, token, telegramUserId, 'Something went wrong.');
+		return Response.json({ ok: false, error: message }, { status: 500 });
+	}
+}
+
 export async function handleAddExpense(sql: Sql, telegramUserId: number, text: string, token: string): Promise<Response> {
 	try {
 		const expense = parseExpense(text);
@@ -232,6 +274,6 @@ export async function handleAddExpense(sql: Sql, telegramUserId: number, text: s
 		const message = error instanceof Error ? error.message : "Invalid input";
 		await saveLog(sql, telegramUserId, message);
 		await trySend(sql, token, telegramUserId, message);
-		return Response.json({ ok: false, error: message }, { status: 400 });
+		return Response.json({ ok: false, error: message });
 	}
 }

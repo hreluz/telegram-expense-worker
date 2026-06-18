@@ -23,7 +23,7 @@ Examples:
 
 The `@date` token is optional and can appear anywhere after the category. If omitted, today's date is used. Categories are created automatically per user and stored in lowercase, so `GYM`, `Gym`, and `gym` all map to the same category.
 
-**List recent expenses** — send `/list` to get your last 10 entries. Add a date filter to see all expenses for a period. Add `categories` to see totals grouped by category instead:
+**List recent expenses** — send `/list` to get your last 10 entries. Each row shows the expense ID (needed for `/delete`), date, amount, category, and note. Add a date filter to see all expenses for a period. Add `categories` to see totals grouped by category instead:
 
 ```
 /list                        # last 10 expenses
@@ -32,6 +32,14 @@ The `@date` token is optional and can appear anywhere after the category. If omi
 /list 2026-05-01             # all expenses on a specific day
 /list categories             # totals per category, all time
 /list categories 2026-05     # totals per category for May 2026
+```
+
+Example output:
+```
+ID    Date        Amount    Category      Note
+#42   2026-06-17  300.00    gym           bought shoes
+#41   2026-06-15  45.50     groceries
+#40   2026-06-10  12.00     coffee
 ```
 
 **Export expenses as CSV** — send `/report` to receive your full history as a `.csv` file. Add a date filter to scope the export. Use `categories` to export totals grouped by category instead:
@@ -45,11 +53,19 @@ The `@date` token is optional and can appear anywhere after the category. If omi
 /report categories 2026-05     # category totals, May   →  categories-2026-05.csv
 ```
 
+**Delete an expense** — send `/delete <id>` to remove an entry by its ID (shown in `/list`). If the deleted expense was the last one in its category, the category is removed automatically.
+
+```
+/delete 42
+```
+
 **Show help** — send `/help` (or `/start`) to see the expense format, examples, and available commands.
 
-**Initialize the database** — send `/migrate` to create the tables (admin only).
+**Initialize the database** — send `/migrate` to create the tables and register the bot command menu (admin only).
 
-**Drop pending Telegram updates** — send `/droppending` to flush Telegram's webhook retry queue (admin only).
+**View error logs** — send `/logs` to see the last 10 error log entries (admin only).
+
+**Drop pending Telegram updates** — send `/droppending` to flush Telegram's webhook retry queue (admin only). Use this if the bot starts sending repeated messages due to a previous error.
 
 ## Stack
 
