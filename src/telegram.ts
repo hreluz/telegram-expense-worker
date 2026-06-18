@@ -1,8 +1,10 @@
-export async function sendTelegramMessage(token: string, chatId: number, text: string) {
+export async function sendTelegramMessage(token: string, chatId: number, text: string, parseMode?: string) {
+	const body: Record<string, unknown> = { chat_id: chatId, text };
+	if (parseMode) body.parse_mode = parseMode;
 	const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ chat_id: chatId, text }),
+		body: JSON.stringify(body),
 	});
 	if (!res.ok) {
 		const error = await res.text();
@@ -13,8 +15,12 @@ export async function sendTelegramMessage(token: string, chatId: number, text: s
 export async function setTelegramCommands(token: string) {
 	const commands = [
 		{ command: 'list', description: 'Last 10 expenses (or /list 2026-05 to filter)' },
+		{ command: 'search', description: 'Find expenses by keyword (category or note)' },
 		{ command: 'report', description: 'Export expenses as CSV (or /report 2026-05 to filter)' },
 		{ command: 'delete', description: 'Delete an expense by ID' },
+		{ command: 'undo', description: 'Delete the most recently added expense' },
+		{ command: 'summary', description: 'Spending snapshot for the current month' },
+		{ command: 'budget', description: 'Set or view monthly category budgets' },
 		{ command: 'help', description: 'Show commands and examples' },
 	];
 	const res = await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {

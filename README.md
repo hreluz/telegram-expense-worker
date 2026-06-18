@@ -42,6 +42,14 @@ ID    Date        Amount    Category      Note
 #40   2026-06-10  12.00     coffee
 ```
 
+**Search expenses** — send `/search <keyword>` to find expenses where the category name or note contains the keyword. The search is case-insensitive and returns all matching entries across all time, formatted the same way as `/list`.
+
+```
+/search gym              # all expenses in the gym category
+/search shoes            # all expenses with "shoes" in the note
+/search weekly           # all expenses with "weekly" in the note
+```
+
 **Export expenses as CSV** — send `/report` to receive your full history as a `.csv` file. Add a date filter to scope the export. Use `categories` to export totals grouped by category instead:
 
 ```
@@ -53,7 +61,21 @@ ID    Date        Amount    Category      Note
 /report categories 2026-05     # category totals, May   →  categories-2026-05.csv
 ```
 
-**Delete an expense** — send `/delete <id>` to remove an entry by its ID (shown in `/list`). If the deleted expense was the last one in its category, the category is removed automatically.
+**Get a spending summary** — send `/summary` to see a snapshot of the current month: total spent, comparison to last month, top 3 categories (with budget vs actual if set), and the single biggest expense. Categories that exceed their budget are flagged with a warning.
+
+**Set monthly budgets** — send `/budget` to set, remove, or list monthly spending limits per category:
+
+```
+/budget gym 500          # set a 500/month budget for gym
+/budget gym off          # remove the gym budget
+/budget                  # list all budgets
+```
+
+When you save an expense that tips a category over its budget, a warning is added to the confirmation message.
+
+**Undo the last expense** — send `/undo` to delete the most recently added expense without looking up its ID. If it was the last expense in its category, the category is removed automatically.
+
+**Delete an expense** — send `/delete <id>` to remove a specific entry by its ID (shown in `/list`). Same orphan-category cleanup as `/undo`.
 
 ```
 /delete 42

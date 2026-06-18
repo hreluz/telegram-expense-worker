@@ -36,11 +36,17 @@ This is a Cloudflare Worker acting as a Telegram bot webhook. Telegram POSTs upd
 ### Layer structure
 
 ```
-src/types.ts     — shared types: Env, TelegramBody, Expense, Sql
-src/db.ts        — data access: fetchReport, fetchRecent, fetchCategoryTotals, saveExpense (all SQL lives here)
-src/telegram.ts  — outbound API: sendTelegramMessage, dropPendingUpdates, setTelegramCommands
-src/handlers.ts  — command logic: parseExpense + one handler per command
-src/index.ts     — worker entry point: parse body, guard, dispatch to handler
+src/types.ts              — shared types: Env, TelegramBody, Expense, Sql
+src/db.ts                 — barrel re-export of src/db/*
+src/db/expenses.ts        — fetchReport, fetchRecent, saveExpense, deleteExpense, deleteLatestExpense, fetchBiggestExpense, searchExpenses
+src/db/categories.ts      — fetchCategoryTotals
+src/db/logs.ts            — migrate, saveLog, fetchLogs
+src/db/budgets.ts         — setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory
+src/telegram.ts           — outbound API: sendTelegramMessage, dropPendingUpdates, setTelegramCommands
+src/handlers/utils.ts     — shared helpers: trySend, validateFilter, parseExpense, HELP_TEXT, date utilities
+src/handlers/admin.ts     — handleMigrate, handleLogs, handleDropPending (imports from utils)
+src/handlers.ts           — expense handlers + barrel re-export of handlers/utils and handlers/admin
+src/index.ts              — worker entry point: parse body, guard, dispatch to handler
 ```
 
 Each layer only imports from layers below it. `index.ts` knows about handlers; handlers know about `db` and `telegram`; neither knows about each other.
@@ -50,22 +56,26 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 - `/start`, `/help` — send `HELP_TEXT` (format, examples, command list); `/start` is the entry point for new users
 - `/list [categories|expenses] [filter]` — last 10 expenses with IDs and a header row (default view `expenses`); with a date filter (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`) returns all matching expenses with no limit. With `categories` view, returns per-category totals as a text message instead.
 - `/report [categories|expenses] [filter]` — full history as a `.csv` file attachment; same date filter syntax scopes the export. With `categories` view, sends category totals CSV (e.g. `categories-2026-05.csv`); with `expenses` view, names the file `expenses-2026-05.csv`.
+- `/budget <category> <amount>` — set a monthly budget for a category (upsert). `/budget <category> off` removes it. `/budget` with no args lists all budgets. Stored by category name in the `budgets` table so budgets can be set before any expenses exist.
+- `/search <keyword>` — case-insensitive substring search across category name and note fields; returns all matching expenses (no limit) formatted like `/list`.
+- `/undo` — delete the most recently added expense (scoped to the current user). Same orphan-category cleanup as `/delete`.
 - `/delete <id>` — delete an expense by ID (scoped to the current user). If the deleted expense was the last one in its category, the category is auto-deleted too.
+- `/summary` — spending snapshot for the current month: total, vs. last month (with % change), top 3 categories, and biggest single expense. Uses `fetchCategoryTotals` (twice — current and previous month) and `fetchBiggestExpense` from `db.ts`.
 - `/migrate` — create DB tables + register bot commands menu via `setTelegramCommands` (admin only)
 - `/logs` — last 10 error log entries (admin only)
 - `/droppending` — flush Telegram's webhook retry queue (admin only)
 
 ### Adding a new command
 
-1. Add a query function in `src/db.ts`
-2. Add a handler in `src/handlers.ts` (call db, call `sendTelegramMessage`, return `Response.json`)
+1. Add a query function in the appropriate `src/db/*.ts` file (expenses, categories, or logs)
+2. Add the handler in `src/handlers.ts` (expense commands) or `src/handlers/admin.ts` (admin commands)
 3. Add one `if (text === "/command")` line in `src/index.ts`
-4. If user-facing, add it to `HELP_TEXT` in `src/handlers.ts` and the `commands` array in `setTelegramCommands` in `src/telegram.ts`
-5. Add tests in the corresponding spec files
+4. If user-facing, add it to `HELP_TEXT` in `src/handlers/utils.ts` and the `commands` array in `setTelegramCommands` in `src/telegram.ts`
+5. Add tests in the corresponding spec files (`test/handlers.spec.ts`, `test/handlers/admin.spec.ts`, or `test/handlers/utils.spec.ts`)
 
 ### Message format
 
-Expense messages follow `<amount> <category> [@YYYY-MM-DD] [note]`. Parsed by `parseExpense` in `handlers.ts` — throws with user-facing error messages on invalid input, which are caught and forwarded to the user via Telegram. The `@date` token is optional and can appear anywhere after the category; if absent, `expenseDate` defaults to today. The category is lowercased before storage so `GYM` and `gym` resolve to the same `categories` row.
+Expense messages follow `<amount> <category> [@YYYY-MM-DD] [note]`. Parsed by `parseExpense` in `src/handlers/utils.ts` — throws with user-facing error messages on invalid input, which are caught and forwarded to the user via Telegram. The `@date` token is optional and can appear anywhere after the category; if absent, `expenseDate` defaults to today. The category is lowercased before storage so `GYM` and `gym` resolve to the same `categories` row.
 
 ## Environment variables
 
@@ -96,7 +106,9 @@ vi.mock("../src/db", () => ({ fetchReport: mockFn }));
 
 **Test structure per layer:**
 - `test/db.spec.ts` — passes a mock sql function directly; verifies each function calls sql and returns its result
-- `test/handlers.spec.ts` — mocks `../src/db` and `../src/telegram`; tests response shape and Telegram message content
+- `test/handlers/utils.spec.ts` — tests `parseExpense` (pure function, no mocks needed)
+- `test/handlers/admin.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests admin handlers
+- `test/handlers.spec.ts` — mocks `../src/db` and `../src/telegram`; tests expense handler response shape and Telegram message content
 - `test/index.spec.ts` — mocks `@neondatabase/serverless` and `../src/telegram`; tests routing and HTTP-level behaviour
 - `test/telegram.spec.ts` — stubs global `fetch`; verifies URL and request body
 
@@ -126,6 +138,14 @@ CREATE TABLE logs (
   message TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TABLE budgets (
+  id SERIAL PRIMARY KEY,
+  telegram_user_id BIGINT NOT NULL,
+  category TEXT NOT NULL,
+  amount NUMERIC(10, 2) NOT NULL,
+  UNIQUE (telegram_user_id, category)
+);
 ```
 
 ## Local end-to-end testing
@@ -142,12 +162,9 @@ To test the full Telegram reply flow, expose the local server with `cloudflared 
 
 ## HTTP response status
 
-**Always return 200** for anything the handler processed — including user errors (bad input, not found, unauthorized, invalid command). Telegram retries any non-200 response, which causes the bot to send duplicate messages to the user in a loop.
+**Always return 200** — for everything: user errors, invalid commands, not found, unauthorized, and infrastructure failures. Telegram retries any non-200 response, which causes the bot to send duplicate messages to the user in a loop.
 
-Only return a non-200 status for genuine infrastructure failures where a retry is actually useful:
-- **500** — database is down, Telegram API unreachable, or other server-side failures
-
-Never use 400, 403, or 404 in handlers. User-facing errors belong in the Telegram message text, not in the HTTP status.
+Never use 400, 403, 404, or 500 in handlers. All errors — including DB failures and Telegram API errors — are sent to the user as a Telegram message and logged via `saveLog`. The HTTP response always has status 200.
 
 ## Code style
 

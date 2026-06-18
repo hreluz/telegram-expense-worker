@@ -92,13 +92,13 @@ describe("telegram-expense-worker", () => {
 	});
 
 	describe("/migrate", () => {
-		it("returns 500 when ADMIN_IDS is not configured", async () => {
+		it("returns 200 when ADMIN_IDS is not configured", async () => {
 			const request = postRequest(telegramMessage("/migrate"));
 			const ctx = createExecutionContext();
 			const response = await worker.fetch(request, testEnv, ctx);
 			await waitOnExecutionContext(ctx);
 
-			expect(response.status).toBe(500);
+			expect(response.status).toBe(200);
 			const body = await response.json() as { error: string };
 			expect(body.error).toBe("ADMIN_IDS is not configured");
 		});
@@ -124,13 +124,13 @@ describe("telegram-expense-worker", () => {
 	});
 
 	describe("/logs", () => {
-		it("returns 500 when ADMIN_IDS is not configured", async () => {
+		it("returns 200 when ADMIN_IDS is not configured", async () => {
 			const request = postRequest(telegramMessage("/logs"));
 			const ctx = createExecutionContext();
 			const response = await worker.fetch(request, testEnv, ctx);
 			await waitOnExecutionContext(ctx);
 
-			expect(response.status).toBe(500);
+			expect(response.status).toBe(200);
 			const body = await response.json() as { error: string };
 			expect(body.error).toBe("ADMIN_IDS is not configured");
 		});
@@ -156,13 +156,13 @@ describe("telegram-expense-worker", () => {
 	});
 
 	describe("/droppending", () => {
-		it("returns 500 when ADMIN_IDS is not configured", async () => {
+		it("returns 200 when ADMIN_IDS is not configured", async () => {
 			const request = postRequest(telegramMessage("/droppending"));
 			const ctx = createExecutionContext();
 			const response = await worker.fetch(request, testEnv, ctx);
 			await waitOnExecutionContext(ctx);
 
-			expect(response.status).toBe(500);
+			expect(response.status).toBe(200);
 		});
 
 		it("returns 200 when user is not in ADMIN_IDS", async () => {
@@ -341,6 +341,50 @@ describe("telegram-expense-worker", () => {
 		});
 	});
 
+	describe("/summary", () => {
+		it("returns ok", async () => {
+			const request = postRequest(telegramMessage("/summary"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+			expect(mockSendTelegramMessage).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("/undo", () => {
+		it("returns ok when there are no expenses", async () => {
+			mockSql.mockResolvedValue([]);
+
+			const request = postRequest(telegramMessage("/undo"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+			expect(mockSendTelegramMessage).toHaveBeenCalledWith("test-token", 42, "No expenses to undo.");
+		});
+
+		it("deletes latest expense and returns ok", async () => {
+			mockSql
+				.mockResolvedValueOnce([{ id: 3, amount: 300, category_id: 5, expense_date: "2026-06-17" }])
+				.mockResolvedValueOnce([{ name: "gym" }])
+				.mockResolvedValueOnce([{ count: 1 }]);
+
+			const request = postRequest(telegramMessage("/undo"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+			expect(mockSendTelegramMessage).toHaveBeenCalledWith("test-token", 42, "Undone: 300.00 gym (2026-06-17).");
+		});
+	});
+
 	describe("/delete", () => {
 		it("deletes an expense and returns ok", async () => {
 			mockSql
@@ -375,6 +419,44 @@ describe("telegram-expense-worker", () => {
 			await waitOnExecutionContext(ctx);
 
 			expect(response.status).toBe(200);
+		});
+	});
+
+	describe("/search", () => {
+		it("returns matching rows when keyword matches", async () => {
+			mockSql.mockResolvedValue([
+				{ id: 1, amount: 300, category: "gym", note: "bought shoes", expense_date: "2026-06-10" },
+			]);
+
+			const request = postRequest(telegramMessage("/search gym"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean; rows: unknown[] };
+			expect(body.ok).toBe(true);
+			expect(body.rows).toHaveLength(1);
+		});
+
+		it("returns ok with empty rows when no matches", async () => {
+			const request = postRequest(telegramMessage("/search xyz"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean; rows: unknown[] };
+			expect(body.ok).toBe(true);
+			expect(body.rows).toEqual([]);
+		});
+
+		it("returns ok: false when keyword is missing", async () => {
+			const request = postRequest(telegramMessage("/search"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(false);
 		});
 	});
 
@@ -436,7 +518,7 @@ describe("telegram-expense-worker", () => {
 			expect(response.status).toBe(200);
 			const body = await response.json() as { ok: boolean; error: string };
 			expect(body.ok).toBe(false);
-			expect(body.error).toBe("Use format: 300 gym");
+			expect((body.error as string)).toContain("Format:");
 		});
 
 		it("returns 400 when amount is not a number", async () => {
@@ -447,7 +529,7 @@ describe("telegram-expense-worker", () => {
 
 			expect(response.status).toBe(200);
 			const body = await response.json() as { error: string };
-			expect(body.error).toBe("Amount must be a valid number");
+			expect((body.error as string)).toContain("Format:");
 		});
 
 		it("returns 400 when amount is zero", async () => {
