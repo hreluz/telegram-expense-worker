@@ -1,7 +1,8 @@
-export async function sendTelegramMessage(token: string, chatId: number, text: string, parseMode?: string, replyMarkup?: Record<string, unknown>) {
+export async function sendTelegramMessage(token: string, chatId: number, text: string, parseMode?: string, replyMarkup?: Record<string, unknown>, replyToMessageId?: number) {
 	const body: Record<string, unknown> = { chat_id: chatId, text };
 	if (parseMode) body.parse_mode = parseMode;
 	if (replyMarkup) body.reply_markup = replyMarkup;
+	if (replyToMessageId) body.reply_to_message_id = replyToMessageId;
 	const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
@@ -18,6 +19,7 @@ export async function setTelegramCommands(token: string) {
 		{ command: 'list', description: 'Last 10 expenses (or /list 2026-05 to filter)' },
 		{ command: 'top', description: 'Top expenses by amount (e.g. /top 5 or /top 5 2026-05)' },
 		{ command: 'compare', description: 'Compare spending across two periods (e.g. /compare gym 2026-04 2026-05)' },
+		{ command: 'note', description: 'Update the note on an expense by ID' },
 		{ command: 'search', description: 'Find expenses by keyword (category or note)' },
 		{ command: 'report', description: 'Export expenses as CSV (or /report 2026-05 to filter)' },
 		{ command: 'delete', description: 'Delete an expense by ID' },
@@ -25,6 +27,7 @@ export async function setTelegramCommands(token: string) {
 		{ command: 'undo', description: 'Delete the most recently added expense' },
 		{ command: 'summary', description: 'Spending snapshot for the current month' },
 		{ command: 'budget', description: 'Set or view monthly category budgets' },
+		{ command: 'settings', description: 'View or update preferences (e.g. category picker)' },
 		{ command: 'help', description: 'Show commands and examples' },
 	];
 	const res = await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {

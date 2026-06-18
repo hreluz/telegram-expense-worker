@@ -15,7 +15,7 @@ export type TelegramBody = {
 	callback_query?: {
 		id: string;
 		from: { id: number };
-		message?: { message_id: number; chat?: { id: number } };
+		message?: { message_id: number; chat?: { id: number }; reply_to_message?: { text?: string } };
 		data?: string;
 	};
 };

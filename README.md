@@ -23,6 +23,8 @@ Examples:
 
 The `@date` token is optional and can appear anywhere after the category. If omitted, today's date is used. Categories are created automatically per user and stored in lowercase, so `GYM`, `Gym`, and `gym` all map to the same category.
 
+When you type a category name that doesn't exist yet and you already have other categories, the bot shows an inline keyboard of your existing categories plus a **Keep 'typed'** button. Tap any button to confirm your choice. This picker can be turned off via `/settings`.
+
 **List recent expenses** — send `/list` to get your last 10 entries. Each row shows the expense ID (needed for `/delete`), date, amount, category, and note. Add a date filter to see all expenses for a period. Add `categories` to see totals grouped by category instead:
 
 ```
@@ -115,12 +117,25 @@ When you save an expense that tips a category over its budget, a warning is adde
 /delete 42
 ```
 
+**Update a note** — send `/note <id> <text>` to set or replace the note on an existing expense. Omit the text to clear it. The ID is shown in `/list`.
+
+```
+/note 42 bought new shoes    # set the note on expense #42
+/note 42                     # clear the note on expense #42
+```
+
 **Rename a category** — send `/rename <old> <new>` to merge all expenses from one category into another. The old category is deleted automatically. Both names are case-insensitive. Works whether the new category already exists or not.
 
 ```
 /rename coffee cafe       # merge coffee into cafe
 /rename gym fitness       # rename gym to fitness (creates fitness if needed)
 ```
+
+**Manage settings** — send `/settings` to open an interactive settings wizard. Each setting is shown one at a time with **[ON]** and **[OFF]** inline buttons; tap to save. Currently available:
+
+| Setting | Default | Description |
+|---|---|---|
+| Category Picker | ON | Suggest existing categories when you type a new one |
 
 **Show help** — send `/help` (or `/start`) to see the expense format, examples, and available commands.
 
@@ -180,6 +195,14 @@ CREATE TABLE IF NOT EXISTS budgets (
   category TEXT NOT NULL,
   amount NUMERIC(10, 2) NOT NULL,
   UNIQUE (telegram_user_id, category)
+);
+
+CREATE TABLE IF NOT EXISTS user_settings (
+  id SERIAL PRIMARY KEY,
+  telegram_user_id BIGINT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  UNIQUE (telegram_user_id, key)
 );
 ```
 

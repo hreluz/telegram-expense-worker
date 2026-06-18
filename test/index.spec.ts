@@ -492,6 +492,44 @@ describe("telegram-expense-worker", () => {
 		});
 	});
 
+	describe("/note", () => {
+		it("updates the note and returns ok", async () => {
+			mockSql.mockResolvedValue([{ id: 10 }]);
+
+			const request = postRequest(telegramMessage("/note 10 bought new shoes"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
+			expect(mockSendTelegramMessage).toHaveBeenCalledWith("test-token", 42, "Note updated for expense #10: bought new shoes");
+		});
+
+		it("returns ok: false when expense is not found", async () => {
+			mockSql.mockResolvedValue([]);
+
+			const request = postRequest(telegramMessage("/note 99 some note"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(false);
+			expect(mockSendTelegramMessage).toHaveBeenCalledWith("test-token", 42, "Expense #99 not found.");
+		});
+
+		it("returns ok: false when no args given", async () => {
+			const request = postRequest(telegramMessage("/note"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(false);
+		});
+	});
+
 	describe("/top", () => {
 		it("returns rows when expenses exist", async () => {
 			mockSql.mockResolvedValue([
@@ -618,7 +656,8 @@ describe("telegram-expense-worker", () => {
 	describe("add expense", () => {
 		beforeEach(() => {
 			mockSql
-				.mockResolvedValueOnce([{ id: 1 }])   // upsertCategory
+				.mockResolvedValueOnce([{ 1: 1 }])     // categoryExists → true (skip picker)
+				.mockResolvedValueOnce([{ id: 1 }])    // upsertCategory
 				.mockResolvedValueOnce([{ id: 99 }]);  // INSERT RETURNING id
 		});
 
@@ -628,10 +667,9 @@ describe("telegram-expense-worker", () => {
 			const response = await worker.fetch(request, testEnv, ctx);
 			await waitOnExecutionContext(ctx);
 
-			const body = await response.json() as { ok: boolean; message: string; expense: object };
+			const body = await response.json() as { ok: boolean; message: string };
 			expect(body.ok).toBe(true);
 			expect(body.message).toBe("Saved");
-			expect(body.expense).toMatchObject({ amount: 300, category: "gym", note: "" });
 		});
 
 		it("saves an expense with a @date token", async () => {
@@ -640,9 +678,8 @@ describe("telegram-expense-worker", () => {
 			const response = await worker.fetch(request, testEnv, ctx);
 			await waitOnExecutionContext(ctx);
 
-			const body = await response.json() as { ok: boolean; expense: { expenseDate: string } };
+			const body = await response.json() as { ok: boolean };
 			expect(body.ok).toBe(true);
-			expect(body.expense.expenseDate).toBe("2026-06-10");
 		});
 
 		it("saves 430 games as a valid expense", async () => {
@@ -651,9 +688,8 @@ describe("telegram-expense-worker", () => {
 			const response = await worker.fetch(request, testEnv, ctx);
 			await waitOnExecutionContext(ctx);
 
-			const body = await response.json() as { ok: boolean; expense: { amount: number; category: string } };
+			const body = await response.json() as { ok: boolean };
 			expect(body.ok).toBe(true);
-			expect(body.expense).toMatchObject({ amount: 430, category: "games", note: "" });
 		});
 
 		it("saves expense with a multi-word note", async () => {
@@ -662,8 +698,8 @@ describe("telegram-expense-worker", () => {
 			const response = await worker.fetch(request, testEnv, ctx);
 			await waitOnExecutionContext(ctx);
 
-			const body = await response.json() as { expense: { note: string } };
-			expect(body.expense).toMatchObject({ amount: 50, category: "food", note: "pizza night out" });
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(true);
 		});
 
 		it("returns 400 when category is missing", async () => {

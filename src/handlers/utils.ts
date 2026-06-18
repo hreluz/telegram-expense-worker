@@ -24,12 +24,16 @@ Format: <code>&lt;amount&gt; &lt;category&gt; [@YYYY-MM-DD] [note]</code>
 🗂 <b>Manage</b>
 <code>/undo</code> — delete last expense
 <code>/delete &lt;id&gt;</code> — delete by ID
+<code>/note &lt;id&gt; &lt;text&gt;</code> — update the note on an expense
 <code>/rename coffee cafe</code> — merge a category into another
 
 💰 <b>Budgets</b>
 <code>/budget gym 500</code> — set monthly limit
 <code>/budget gym off</code> — remove limit
 <code>/budget</code> — list all budgets
+
+⚙️ <b>Settings</b>
+<code>/settings</code> — open the settings menu
 
 💡 Add <code>categories</code> after <code>/list</code> or <code>/report</code> for totals
 📅 Date filter: YYYY, YYYY-MM, or YYYY-MM-DD`;

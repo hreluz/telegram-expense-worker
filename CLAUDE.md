@@ -21,7 +21,7 @@ npm run cf-typegen  # regenerate worker-configuration.d.ts from wrangler.jsonc
 
 Run a single test file:
 ```bash
-npx vitest run test/handlers.spec.ts
+npx vitest run test/handlers/expenses.spec.ts
 ```
 
 Run tests matching a name:
@@ -38,20 +38,29 @@ This is a Cloudflare Worker acting as a Telegram bot webhook. Telegram POSTs upd
 ```
 src/types.ts              — shared types: Env, TelegramBody, Expense, Sql
 src/db.ts                 — barrel re-export of src/db/*
-src/db/expenses.ts        — fetchReport, fetchRecent, saveExpense, deleteExpense, deleteLatestExpense, fetchBiggestExpense, searchExpenses, fetchTopExpenses, fetchPeriodSummary
-src/db/categories.ts      — fetchCategoryTotals, renameCategory, categoryExists
+src/db/expenses.ts        — fetchReport, fetchRecent, saveExpense, updateExpenseNote, deleteExpense, deleteLatestExpense, fetchBiggestExpense, searchExpenses, fetchTopExpenses, fetchPeriodSummary
+src/db/categories.ts      — fetchCategoryTotals, renameCategory, categoryExists, fetchAllCategories
 src/db/logs.ts            — migrate, saveLog, fetchLogs
 src/db/budgets.ts         — setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory
+src/db/settings.ts        — setUserSetting, getUserSetting, fetchAllSettings
 src/telegram.ts           — outbound API: sendTelegramMessage, dropPendingUpdates, setTelegramCommands, answerCallbackQuery, editMessageReplyMarkup
 src/handlers/utils.ts     — shared helpers: trySend, validateFilter, parseExpense, HELP_TEXT, date utilities
-src/handlers/admin.ts     — handleMigrate, handleLogs, handleDropPending (imports from utils)
-src/handlers.ts           — expense handlers + barrel re-export of handlers/utils and handlers/admin
+src/handlers/expenses.ts  — handleAddExpense, handleDelete, handleUndo, handleNote, handleCallbackQuery
+src/handlers/views.ts     — handleHelp, handleList, handleReport, handleSearch, handleTop
+src/handlers/insights.ts  — handleSummary, handleCompare
+src/handlers/budgets.ts   — handleBudget
+src/handlers/categories.ts — handleRename
+src/handlers/settings.ts  — handleSettings, handleSettingCallback, SETTINGS_STEPS, buildSettingKeyboard
+src/handlers/admin.ts     — handleMigrate, handleLogs, handleDropPending
+src/handlers.ts           — barrel re-export of all handlers/* modules
 src/index.ts              — worker entry point: parse body, guard, dispatch to handler
 ```
 
 Each layer only imports from layers below it. `index.ts` knows about handlers; handlers know about `db` and `telegram`; neither knows about each other.
 
 `index.ts` handles two Telegram update types: `message` (text commands and expense entries) and `callback_query` (inline button taps). `callback_query` updates are routed to `handleCallbackQuery` before the text dispatch.
+
+`handleCallbackQuery` in `src/handlers/expenses.ts` dispatches on `callback_data` prefix: `undo_` → delete expense; `catpick_` → re-parse `reply_to_message.text` and save with the chosen category; `setting|` → delegate to `handleSettingCallback` and return early (to avoid double-answering the callback query).
 
 ### Available commands
 
@@ -63,9 +72,11 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 - `/top [N] [filter]` — top N expenses ordered by amount descending (default N=10). Same date filter syntax as `/list`. First token is N if it's a plain integer, otherwise treated as the filter. N is clamped to minimum 1.
 - `/compare [category] [period1] [period2]` — side-by-side summary (total, count, biggest) for two periods. Category is optional; if omitted, compares all spending. Period2 defaults to the previous period (previous month for `YYYY-MM`, previous year for `YYYY`). Uses `fetchPeriodSummary` (one SQL call per period) and `categoryExists` to validate the category before querying. Change = period2 − period1.
 - `/rename <old> <new>` — merge all expenses from `<old>` category into `<new>`, then delete `<old>`. Both names are lowercased. If `<new>` doesn't exist it's created via upsert; if it already exists expenses are merged into it.
+- `/note <id> [text]` — set or replace the note on an existing expense (scoped to current user). Omit text to clear the note. Uses `updateExpenseNote` which does `UPDATE … RETURNING id` to detect not-found. Confirmation includes the new note text when non-empty, or "Note cleared" when empty.
 - `/undo` — delete the most recently added expense (scoped to the current user). Same orphan-category cleanup as `/delete`.
 - `/delete <id>` — delete an expense by ID (scoped to the current user). If the deleted expense was the last one in its category, the category is auto-deleted too.
 - `/summary` — spending snapshot for the current month: total, vs. last month (with % change), top 3 categories, and biggest single expense. Uses `fetchCategoryTotals` (twice — current and previous month) and `fetchBiggestExpense` from `db.ts`.
+- `/settings` — open an interactive wizard to manage per-user preferences. Each setting is shown one at a time with `[ON]` / `[OFF]` inline buttons; tapping saves the value and dismisses the keyboard. Driven by the `SETTINGS_STEPS` array in `src/handlers/settings.ts` — add a new entry there to expose a new setting without touching the routing. Callback data format: `setting|<key>|<value>|<step>`. Currently available: `category_picker` (default `on`).
 - `/migrate` — create DB tables + register bot commands menu via `setTelegramCommands` (admin only)
 - `/logs` — last 10 error log entries (admin only)
 - `/droppending` — flush Telegram's webhook retry queue (admin only)
@@ -73,10 +84,11 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 ### Adding a new command
 
 1. Add a query function in the appropriate `src/db/*.ts` file (expenses, categories, or logs)
-2. Add the handler in `src/handlers.ts` (expense commands) or `src/handlers/admin.ts` (admin commands)
-3. Add one `if (text === "/command")` line in `src/index.ts`
-4. If user-facing, add it to `HELP_TEXT` in `src/handlers/utils.ts` and the `commands` array in `setTelegramCommands` in `src/telegram.ts`
-5. Add tests in the corresponding spec files (`test/handlers.spec.ts`, `test/handlers/admin.spec.ts`, or `test/handlers/utils.spec.ts`)
+2. Add the handler in the appropriate `src/handlers/*.ts` file by domain (expenses, views, insights, budgets, categories, or admin)
+3. Re-export it from `src/handlers.ts` if it doesn't come from an already-starred module (the barrel covers all subdirectories)
+4. Add one `if (text === "/command")` line in `src/index.ts`
+5. If user-facing, add it to `HELP_TEXT` in `src/handlers/utils.ts` and the `commands` array in `setTelegramCommands` in `src/telegram.ts`
+6. Add tests in the matching `test/handlers/*.spec.ts` file (same domain grouping as the source)
 
 ### Message format
 
@@ -112,8 +124,13 @@ vi.mock("../src/db", () => ({ fetchReport: mockFn }));
 **Test structure per layer:**
 - `test/db.spec.ts` — passes a mock sql function directly; verifies each function calls sql and returns its result
 - `test/handlers/utils.spec.ts` — tests `parseExpense` (pure function, no mocks needed)
+- `test/handlers/expenses.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleAddExpense, handleDelete, handleUndo, handleNote, handleCallbackQuery
+- `test/handlers/views.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleHelp, handleList, handleReport, handleSearch, handleTop
+- `test/handlers/insights.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleSummary, handleCompare
+- `test/handlers/budgets.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleBudget
+- `test/handlers/categories.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleRename
+- `test/handlers/settings.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleSettings, handleSettingCallback, buildSettingKeyboard
 - `test/handlers/admin.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests admin handlers
-- `test/handlers.spec.ts` — mocks `../src/db` and `../src/telegram`; tests expense handler response shape and Telegram message content
 - `test/index.spec.ts` — mocks `@neondatabase/serverless` and `../src/telegram`; tests routing and HTTP-level behaviour
 - `test/telegram.spec.ts` — stubs global `fetch`; verifies URL and request body
 
@@ -150,6 +167,14 @@ CREATE TABLE budgets (
   category TEXT NOT NULL,
   amount NUMERIC(10, 2) NOT NULL,
   UNIQUE (telegram_user_id, category)
+);
+
+CREATE TABLE user_settings (
+  id SERIAL PRIMARY KEY,
+  telegram_user_id BIGINT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  UNIQUE (telegram_user_id, key)
 );
 ```
 

@@ -18,6 +18,11 @@ export async function renameCategory(sql: Sql, telegramUserId: number, oldName: 
 	return { found: true, count: updated.length };
 }
 
+export async function fetchAllCategories(sql: Sql, telegramUserId: number): Promise<string[]> {
+	const rows = await sql`SELECT name FROM categories WHERE telegram_user_id = ${telegramUserId} ORDER BY name`;
+	return rows.map((r) => r.name as string);
+}
+
 export async function categoryExists(sql: Sql, telegramUserId: number, name: string): Promise<boolean> {
 	const rows = await sql`SELECT 1 FROM categories WHERE telegram_user_id = ${telegramUserId} AND name = ${name} LIMIT 1`;
 	return rows.length > 0;
