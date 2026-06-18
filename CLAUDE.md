@@ -21,7 +21,7 @@ npm run cf-typegen  # regenerate worker-configuration.d.ts from wrangler.jsonc
 
 Run a single test file:
 ```bash
-npx vitest run test/handlers.spec.ts
+npx vitest run test/handlers/expenses.spec.ts
 ```
 
 Run tests matching a name:
@@ -44,8 +44,13 @@ src/db/logs.ts            — migrate, saveLog, fetchLogs
 src/db/budgets.ts         — setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory
 src/telegram.ts           — outbound API: sendTelegramMessage, dropPendingUpdates, setTelegramCommands, answerCallbackQuery, editMessageReplyMarkup
 src/handlers/utils.ts     — shared helpers: trySend, validateFilter, parseExpense, HELP_TEXT, date utilities
-src/handlers/admin.ts     — handleMigrate, handleLogs, handleDropPending (imports from utils)
-src/handlers.ts           — expense handlers + barrel re-export of handlers/utils and handlers/admin
+src/handlers/expenses.ts  — handleAddExpense, handleDelete, handleUndo, handleNote, handleCallbackQuery
+src/handlers/views.ts     — handleHelp, handleList, handleReport, handleSearch, handleTop
+src/handlers/insights.ts  — handleSummary, handleCompare
+src/handlers/budgets.ts   — handleBudget
+src/handlers/categories.ts — handleRename
+src/handlers/admin.ts     — handleMigrate, handleLogs, handleDropPending
+src/handlers.ts           — barrel re-export of all handlers/* modules
 src/index.ts              — worker entry point: parse body, guard, dispatch to handler
 ```
 
@@ -74,10 +79,11 @@ Each layer only imports from layers below it. `index.ts` knows about handlers; h
 ### Adding a new command
 
 1. Add a query function in the appropriate `src/db/*.ts` file (expenses, categories, or logs)
-2. Add the handler in `src/handlers.ts` (expense commands) or `src/handlers/admin.ts` (admin commands)
-3. Add one `if (text === "/command")` line in `src/index.ts`
-4. If user-facing, add it to `HELP_TEXT` in `src/handlers/utils.ts` and the `commands` array in `setTelegramCommands` in `src/telegram.ts`
-5. Add tests in the corresponding spec files (`test/handlers.spec.ts`, `test/handlers/admin.spec.ts`, or `test/handlers/utils.spec.ts`)
+2. Add the handler in the appropriate `src/handlers/*.ts` file by domain (expenses, views, insights, budgets, categories, or admin)
+3. Re-export it from `src/handlers.ts` if it doesn't come from an already-starred module (the barrel covers all subdirectories)
+4. Add one `if (text === "/command")` line in `src/index.ts`
+5. If user-facing, add it to `HELP_TEXT` in `src/handlers/utils.ts` and the `commands` array in `setTelegramCommands` in `src/telegram.ts`
+6. Add tests in the matching `test/handlers/*.spec.ts` file (same domain grouping as the source)
 
 ### Message format
 
@@ -113,8 +119,12 @@ vi.mock("../src/db", () => ({ fetchReport: mockFn }));
 **Test structure per layer:**
 - `test/db.spec.ts` — passes a mock sql function directly; verifies each function calls sql and returns its result
 - `test/handlers/utils.spec.ts` — tests `parseExpense` (pure function, no mocks needed)
+- `test/handlers/expenses.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleAddExpense, handleDelete, handleUndo, handleNote, handleCallbackQuery
+- `test/handlers/views.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleHelp, handleList, handleReport, handleSearch, handleTop
+- `test/handlers/insights.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleSummary, handleCompare
+- `test/handlers/budgets.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleBudget
+- `test/handlers/categories.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests handleRename
 - `test/handlers/admin.spec.ts` — mocks `../../src/db` and `../../src/telegram`; tests admin handlers
-- `test/handlers.spec.ts` — mocks `../src/db` and `../src/telegram`; tests expense handler response shape and Telegram message content
 - `test/index.spec.ts` — mocks `@neondatabase/serverless` and `../src/telegram`; tests routing and HTTP-level behaviour
 - `test/telegram.spec.ts` — stubs global `fetch`; verifies URL and request body
 
