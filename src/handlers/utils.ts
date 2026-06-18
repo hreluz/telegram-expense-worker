@@ -5,29 +5,29 @@ import { saveLog } from '../db';
 export const HELP_TEXT = `<b>Expense Tracker Bot</b>
 
 Send a message to log an expense:
-<pre>300 gym
-45.50 groceries weekly shopping
-300 gym @2026-06-10
-300 gym @2026-06-10 bought shoes</pre>
-Format: &lt;amount&gt; &lt;category&gt; [@YYYY-MM-DD] [note]
+🏋️ <code>300 gym</code>
+🛒 <code>45.50 groceries weekly shopping</code>
+🗓 <code>300 gym @2026-06-10</code>
+📝 <code>300 gym @2026-06-10 bought shoes</code>
+Format: <code>&lt;amount&gt; &lt;category&gt; [@YYYY-MM-DD] [note]</code>
 
-<b>View</b>
-/list — last 10 expenses
-/list 2026-05 — filter by year, month, or day
-/report — export full history as CSV
-/summary — monthly spending snapshot
+📋 <b>View</b>
+<code>/list</code> — last 10 expenses
+<code>/list 2026-05</code> — filter by year, month, or day
+<code>/report</code> — export full history as CSV
+<code>/summary</code> — monthly spending snapshot
 
-<b>Manage</b>
-/undo — delete last expense
-/delete &lt;id&gt; — delete by ID
+🗂 <b>Manage</b>
+<code>/undo</code> — delete last expense
+<code>/delete &lt;id&gt;</code> — delete by ID
 
-<b>Budgets</b>
-/budget gym 500 — set monthly limit
-/budget gym off — remove limit
-/budget — list all budgets
+💰 <b>Budgets</b>
+<code>/budget gym 500</code> — set monthly limit
+<code>/budget gym off</code> — remove limit
+<code>/budget</code> — list all budgets
 
-Add <code>categories</code> after /list or /report for category totals.
-Date filter format: YYYY, YYYY-MM, or YYYY-MM-DD`;
+💡 Add <code>categories</code> after <code>/list</code> or <code>/report</code> for totals
+📅 Date filter: YYYY, YYYY-MM, or YYYY-MM-DD`;
 
 export async function trySend(sql: Sql, token: string, telegramUserId: number, text: string, parseMode?: string) {
 	try {
