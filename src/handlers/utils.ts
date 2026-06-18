@@ -30,9 +30,15 @@ Format: <code>&lt;amount&gt; &lt;category&gt; [@YYYY-MM-DD] [note]</code>
 💡 Add <code>categories</code> after <code>/list</code> or <code>/report</code> for totals
 📅 Date filter: YYYY, YYYY-MM, or YYYY-MM-DD`;
 
-export async function trySend(sql: Sql, token: string, telegramUserId: number, text: string, parseMode?: string) {
+export async function trySend(sql: Sql, token: string, telegramUserId: number, text: string, parseMode?: string, replyMarkup?: Record<string, unknown>) {
 	try {
-		await (parseMode ? sendTelegramMessage(token, telegramUserId, text, parseMode) : sendTelegramMessage(token, telegramUserId, text));
+		if (replyMarkup) {
+			await sendTelegramMessage(token, telegramUserId, text, parseMode, replyMarkup);
+		} else if (parseMode) {
+			await sendTelegramMessage(token, telegramUserId, text, parseMode);
+		} else {
+			await sendTelegramMessage(token, telegramUserId, text);
+		}
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Failed to send Telegram message';
 		await saveLog(sql, telegramUserId, message);

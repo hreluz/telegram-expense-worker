@@ -71,21 +71,21 @@ describe("db", () => {
 	});
 
 	describe("saveExpense", () => {
-		it("calls sql twice (upsert category + insert) and returns nothing", async () => {
+		it("calls sql twice (upsert category + insert) and returns the new expense id", async () => {
 			(mockSql as ReturnType<typeof vi.fn>)
 				.mockResolvedValueOnce([{ id: 1 }])
-				.mockResolvedValueOnce([]);
+				.mockResolvedValueOnce([{ id: 99 }]);
 
 			const result = await saveExpense(mockSql, 42, { amount: 300, category: "gym", note: "", expenseDate: "2026-06-10" });
 
 			expect(mockSql).toHaveBeenCalledTimes(2);
-			expect(result).toBeUndefined();
+			expect(result).toBe(99);
 		});
 
 		it("scopes category upsert to the user's telegram_user_id", async () => {
 			(mockSql as ReturnType<typeof vi.fn>)
 				.mockResolvedValueOnce([{ id: 1 }])
-				.mockResolvedValueOnce([]);
+				.mockResolvedValueOnce([{ id: 99 }]);
 
 			await saveExpense(mockSql, 42, { amount: 300, category: "gym", note: "", expenseDate: "2026-06-10" });
 
@@ -98,7 +98,7 @@ describe("db", () => {
 		it("uses ON CONFLICT (telegram_user_id, name) to prevent duplicate categories per user", async () => {
 			(mockSql as ReturnType<typeof vi.fn>)
 				.mockResolvedValueOnce([{ id: 1 }])
-				.mockResolvedValueOnce([]);
+				.mockResolvedValueOnce([{ id: 99 }]);
 
 			await saveExpense(mockSql, 42, { amount: 300, category: "gym", note: "", expenseDate: "2026-06-10" });
 

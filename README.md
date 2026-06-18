@@ -73,7 +73,7 @@ ID    Date        Amount    Category      Note
 
 When you save an expense that tips a category over its budget, a warning is added to the confirmation message.
 
-**Undo the last expense** — send `/undo` to delete the most recently added expense without looking up its ID. If it was the last expense in its category, the category is removed automatically.
+**Undo the last expense** — send `/undo` to delete the most recently added expense without looking up its ID. If it was the last expense in its category, the category is removed automatically. You can also tap the **🗑 Undo** inline button that appears on every expense confirmation message — it deletes that specific expense and removes the button from the message.
 
 **Delete an expense** — send `/delete <id>` to remove a specific entry by its ID (shown in `/list`). Same orphan-category cleanup as `/undo`.
 
