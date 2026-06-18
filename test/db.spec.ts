@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses } from "../src/db";
+import { fetchReport, fetchRecent, fetchCategoryTotals, saveExpense, migrate, saveLog, fetchLogs, deleteExpense, fetchBiggestExpense, deleteLatestExpense, setBudget, removeBudget, fetchBudgets, fetchBudgetForCategory, searchExpenses, renameCategory } from "../src/db";
 import type { Sql } from "../src/types";
 
 describe("db", () => {
@@ -308,6 +308,56 @@ describe("db", () => {
 
 			const sqlStrings = (mockSql as ReturnType<typeof vi.fn>).mock.calls[0][0] as string[];
 			expect(sqlStrings.join("")).toContain("ILIKE");
+		});
+	});
+
+	describe("renameCategory", () => {
+		it("returns { found: false } when old category does not exist", async () => {
+			(mockSql as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+
+			const result = await renameCategory(mockSql, 42, "coffee", "cafe");
+
+			expect(result).toEqual({ found: false, count: 0 });
+			expect(mockSql).toHaveBeenCalledOnce();
+		});
+
+		it("returns { found: true, count: N } and makes 4 sql calls on success", async () => {
+			(mockSql as ReturnType<typeof vi.fn>)
+				.mockResolvedValueOnce([{ id: 1 }])   // SELECT old category
+				.mockResolvedValueOnce([{ id: 2 }])   // INSERT/upsert new category
+				.mockResolvedValueOnce([{}, {}])       // UPDATE expenses (2 rows)
+				.mockResolvedValueOnce([]);             // DELETE old category
+
+			const result = await renameCategory(mockSql, 42, "coffee", "cafe");
+
+			expect(result).toEqual({ found: true, count: 2 });
+			expect(mockSql).toHaveBeenCalledTimes(4);
+		});
+
+		it("resolves to the existing category id when new name already exists", async () => {
+			(mockSql as ReturnType<typeof vi.fn>)
+				.mockResolvedValueOnce([{ id: 1 }])   // SELECT old category
+				.mockResolvedValueOnce([{ id: 3 }])   // upsert returns existing id
+				.mockResolvedValueOnce([{ id: 10 }])  // UPDATE expenses RETURNING id
+				.mockResolvedValueOnce([]);             // DELETE old category
+
+			const result = await renameCategory(mockSql, 42, "coffee", "cafe");
+
+			expect(result).toEqual({ found: true, count: 1 });
+		});
+
+		it("uses RETURNING on the UPDATE so the count reflects actual rows moved", async () => {
+			(mockSql as ReturnType<typeof vi.fn>)
+				.mockResolvedValueOnce([{ id: 1 }])
+				.mockResolvedValueOnce([{ id: 2 }])
+				.mockResolvedValueOnce([{ id: 10 }, { id: 11 }])
+				.mockResolvedValueOnce([]);
+
+			await renameCategory(mockSql, 42, "gymm", "gym");
+
+			const updateCall = (mockSql as ReturnType<typeof vi.fn>).mock.calls[2];
+			const sqlStrings = updateCall[0] as string[];
+			expect(sqlStrings.join("")).toContain("RETURNING");
 		});
 	});
 

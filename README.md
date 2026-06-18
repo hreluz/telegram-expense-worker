@@ -81,6 +81,13 @@ When you save an expense that tips a category over its budget, a warning is adde
 /delete 42
 ```
 
+**Rename a category** — send `/rename <old> <new>` to merge all expenses from one category into another. The old category is deleted automatically. Both names are case-insensitive. Works whether the new category already exists or not.
+
+```
+/rename coffee cafe       # merge coffee into cafe
+/rename gym fitness       # rename gym to fitness (creates fitness if needed)
+```
+
 **Show help** — send `/help` (or `/start`) to see the expense format, examples, and available commands.
 
 **Initialize the database** — send `/migrate` to create the tables and register the bot command menu (admin only).
