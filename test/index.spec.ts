@@ -51,6 +51,36 @@ describe("telegram-expense-worker", () => {
 		mockEditMessageReplyMarkup.mockResolvedValue(undefined);
 	});
 
+	describe("/rename", () => {
+		it("renames a category and returns ok", async () => {
+			mockSql
+				.mockResolvedValueOnce([{ id: 1 }])   // SELECT old category
+				.mockResolvedValueOnce([{ id: 2 }])   // upsert new category
+				.mockResolvedValueOnce([{}, {}])       // UPDATE expenses
+				.mockResolvedValueOnce([]);             // DELETE old category
+
+			const request = postRequest(telegramMessage("/rename coffee cafe"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean; count: number };
+			expect(body.ok).toBe(true);
+			expect(body.count).toBe(2);
+			expect(mockSendTelegramMessage).toHaveBeenCalledWith("test-token", 42, "Renamed coffee → cafe. 2 expenses updated.");
+		});
+
+		it("returns ok: false when args are missing", async () => {
+			const request = postRequest(telegramMessage("/rename"));
+			const ctx = createExecutionContext();
+			const response = await worker.fetch(request, testEnv, ctx);
+			await waitOnExecutionContext(ctx);
+
+			const body = await response.json() as { ok: boolean };
+			expect(body.ok).toBe(false);
+		});
+	});
+
 	describe("callback_query routing", () => {
 		function telegramCallbackQuery(data: string, userId = 42, messageId = 100) {
 			return { callback_query: { id: 'cq_123', from: { id: userId }, message: { message_id: messageId, chat: { id: userId } }, data } };

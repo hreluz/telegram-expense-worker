@@ -19,6 +19,7 @@ export async function setTelegramCommands(token: string) {
 		{ command: 'search', description: 'Find expenses by keyword (category or note)' },
 		{ command: 'report', description: 'Export expenses as CSV (or /report 2026-05 to filter)' },
 		{ command: 'delete', description: 'Delete an expense by ID' },
+		{ command: 'rename', description: 'Merge one category into another' },
 		{ command: 'undo', description: 'Delete the most recently added expense' },
 		{ command: 'summary', description: 'Spending snapshot for the current month' },
 		{ command: 'budget', description: 'Set or view monthly category budgets' },
